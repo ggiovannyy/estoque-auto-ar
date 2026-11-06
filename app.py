@@ -8,13 +8,14 @@ import math
 import os
 import secrets
 import sqlite3
-import threading
-import time
 from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
+from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
@@ -22,55 +23,10 @@ os.makedirs(DATA, exist_ok=True)
 DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
-MIN_PASSWORD = 8
 
-
-def password_error(pw):
-    if len(pw or "") < MIN_PASSWORD:
-        return f"A senha precisa ter pelo menos {MIN_PASSWORD} caracteres."
-    return None
-
-
-class LoginThrottle:
-    """Bloqueia uma chave (IP, ou IP + usuario) depois de erros de senha seguidos.
-
-    Guarda tudo em memoria: reiniciar o sistema zera os bloqueios, o que basta
-    para uma oficina com um unico servidor.
-    """
-    WINDOW_SECONDS = 15 * 60  # erros mais antigos que isso nao contam
-    LOCK_SECONDS = 5 * 60
-
-    def __init__(self, max_failures):
-        self.max_failures = max_failures
-        self.clock = time.monotonic
-        self._failures = {}      # chave -> horarios dos erros recentes
-        self._locked_until = {}  # chave -> horario em que o bloqueio acaba
-        self._lock = threading.Lock()
-
-    def retry_after(self, key):
-        """Segundos que faltam para liberar a chave (0 = liberada)."""
-        with self._lock:
-            return max(0, self._locked_until.get(key, 0) - self.clock())
-
-    def failure(self, key):
-        with self._lock:
-            now = self.clock()
-            recent = [t for t in self._failures.get(key, []) if now - t < self.WINDOW_SECONDS] + [now]
-            if len(recent) >= self.max_failures:
-                self._locked_until[key] = now + self.LOCK_SECONDS
-                recent = []
-            self._failures[key] = recent
-
-    def success(self, key):
-        with self._lock:
-            self._failures.pop(key, None)
-            self._locked_until.pop(key, None)
-
-    def reset(self):
-        with self._lock:
-            self._failures.clear()
-            self._locked_until.clear()
-
+# O primeiro acesso cria o dono: so pode ser feito no computador onde o sistema roda,
+# para ninguem no Wi-Fi da oficina se cadastrar como dono antes dele.
+LOCAL_ADDRESSES = {"127.0.0.1", "::1"}
 
 user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
 ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
@@ -128,7 +84,8 @@ def get_secret():
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = get_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
+                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
+                  BACKUP_DIR=str(default_backup_dir(DATA)))
 
 
 def db():
@@ -234,7 +191,8 @@ def manifest():
 
 
 @app.after_request
-def no_cache_api(resp):
+def add_response_headers(resp):
+    resp.headers.update(SECURITY_HEADERS)
     if request.path.startswith("/api/"):
         resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -246,6 +204,7 @@ def state():
     users = db().execute("SELECT COUNT(*) FROM users").fetchone()[0]
     u = current_user()
     return jsonify(setup_needed=users == 0,
+                   setup_here=request.remote_addr in LOCAL_ADDRESSES,
                    user=dict(u) if u else None,
                    min_default=min_default())
 
@@ -254,12 +213,14 @@ def state():
 def setup():
     if db().execute("SELECT COUNT(*) FROM users").fetchone()[0]:
         return err("O sistema já foi configurado.", 403)
+    if request.remote_addr not in LOCAL_ADDRESSES:
+        return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
     d = request.get_json(silent=True) or {}
     name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
     if not (name and username):
         return err("Informe nome e usuário.")
-    if password_error(pw):
-        return err(password_error(pw))
+    if error := password_error(pw):
+        return err(error)
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
                        (name, username.lower(), generate_password_hash(pw)))
     db().commit()
@@ -512,16 +473,6 @@ def movements():
     return jsonify([dict(r) for r in rows])
 
 
-FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def csv_safe(value):
-    """Impede que o Excel execute como formula um texto digitado (ex.: '=HYPERLINK(...)')."""
-    if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
-        return "'" + value
-    return value
-
-
 @app.get("/api/export.csv")
 @login_required()
 def export_csv():
@@ -551,6 +502,28 @@ def set_settings():
     return jsonify(min_default=n)
 
 
+def backup_status():
+    last = last_backup_at(app.config["BACKUP_DIR"])
+    return {"dir": app.config["BACKUP_DIR"], "last_at": last.strftime("%Y-%m-%d %H:%M:%S") if last else None}
+
+
+@app.get("/api/backup")
+@login_required(owner=True)
+def get_backup():
+    return jsonify(backup_status())
+
+
+@app.post("/api/backup")
+@login_required(owner=True)
+def backup_now():
+    try:
+        make_backup(DB_PATH, app.config["BACKUP_DIR"])
+        prune_backups(app.config["BACKUP_DIR"], DEFAULT_KEEP)
+    except (OSError, sqlite3.Error) as e:
+        return err(f"Não foi possível salvar o backup: {e}", 500)
+    return jsonify(backup_status())
+
+
 @app.get("/api/users")
 @login_required(owner=True)
 def users():
@@ -566,8 +539,8 @@ def add_user():
     role = "dono" if d.get("role") == "dono" else "atendente"
     if not (name and username):
         return err("Informe nome e usuário.")
-    if password_error(pw):
-        return err(password_error(pw))
+    if error := password_error(pw):
+        return err(error)
     try:
         db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)",
                      (name, username.lower(), generate_password_hash(pw), role))
@@ -586,8 +559,8 @@ def edit_user(uid):
             return err("Você não pode desativar o próprio usuário.")
         db().execute("UPDATE users SET active=? WHERE id=?", (1 if d["active"] else 0, uid))
     if d.get("password"):
-        if password_error(d["password"]):
-            return err(password_error(d["password"]))
+        if error := password_error(d["password"]):
+            return err(error)
         db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["password"]), uid))
     db().commit()
     return jsonify(ok=True)
@@ -600,8 +573,8 @@ def change_password():
     u = db().execute("SELECT password_hash FROM users WHERE id=?", (g.user["id"],)).fetchone()
     if not check_password_hash(u["password_hash"], d.get("current") or ""):
         return err("Senha atual incorreta.")
-    if password_error(d.get("new")):
-        return err(password_error(d.get("new")))
+    if error := password_error(d.get("new")):
+        return err(error)
     db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["new"]), g.user["id"]))
     db().commit()
     return jsonify(ok=True)

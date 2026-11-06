@@ -2,7 +2,7 @@
 /* Estoque Maxx Auto Ar - interface (JS puro, sem build). */
 
 const S = {
-  user: null, setupNeeded: false, minDefault: 2,
+  user: null, setupNeeded: false, setupHere: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
   low: [], q: "", cat: 0, loaded: false,
 };
@@ -61,6 +61,7 @@ async function refresh() { try { await loadAll(); await loadTabData(); } catch (
 
 /* ---------------------------------------------------------------- views */
 function authView() {
+  if (S.setupNeeded && !S.setupHere) return setupElsewhereView();
   const setup = S.setupNeeded;
   app.innerHTML = `<div class="login">
     <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
@@ -78,6 +79,13 @@ function authView() {
     try { await api(setup ? "/setup" : "/login", { method: "POST", body }); await boot(); }
     catch (er) { $("#autherr").innerHTML = `<div class="err">${esc(er.message)}</div>`; }
   };
+}
+
+function setupElsewhereView() {
+  app.innerHTML = `<div class="login">
+    <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
+    <div class="info">O sistema ainda não foi configurado. Faça o primeiro acesso no computador da oficina,
+      em <b>https://localhost:8443</b>, para criar o usuário do dono. Depois é só entrar por aqui.</div></div>`;
 }
 
 function shell(inner) {
@@ -147,6 +155,8 @@ function moreView() {
     ${owner ? `<div class="section card"><h3>Alerta de estoque baixo</h3>
       <form id="minform" class="setting"><div class="l">Avisar quando restar até<small>Cada peça pode ter seu próprio mínimo</small></div>
       <div style="display:flex;gap:8px;width:150px"><input name="min" type="number" min="0" value="${S.minDefault}" aria-label="Mínimo padrão"><button class="btn sm">OK</button></div></form></div>
+    <div class="section card"><h3>Backup</h3><div id="backupbox"><span class="muted">Carregando…</span></div>
+      <button class="btn sm ghost" data-act="backup" style="margin-top:10px">Fazer backup agora</button></div>
     <div class="section card"><h3>Categorias</h3><div id="catbox"></div>
       <form id="catform" style="display:flex;gap:8px;margin-top:10px"><input name="name" placeholder="Nova categoria" required><button class="btn sm">Adicionar</button></form></div>
     <div class="section card"><h3>Usuários</h3><div id="userbox"></div>
@@ -156,7 +166,7 @@ function moreView() {
       <div class="setting"><div class="l">${esc(S.user.name)}<small>${S.user.role === "dono" ? "Dono" : "Atendente"} · ${esc(S.user.username)}</small></div>
       <button class="btn sm ghost" data-act="pw">Trocar senha</button></div>
       <button class="btn dark block" data-act="logout" style="margin-top:8px">Sair</button></div>`);
-  if (owner) { renderCats(); renderUsers(); }
+  if (owner) { renderCats(); renderUsers(); renderBackup(); }
   const cf = $("#catform");
   cf.onsubmit = async (e) => { e.preventDefault();
     try { await api("/categories", { method: "POST", body: { name: new FormData(cf).get("name") } }); toast("Categoria criada."); await refresh(); } catch (er) { toast(er.message, true); } };
@@ -168,6 +178,16 @@ function renderCats() {
   $("#catbox").innerHTML = S.cats.map((c) => `<div class="setting"><div class="l">${esc(c.name)}<small>${c.products} peça(s)</small></div>
     <button class="btn sm ghost" data-delcat="${c.id}" aria-label="Excluir ${esc(c.name)}">Excluir</button></div>`).join("");
 }
+const BACKUP_LATE_MS = 48 * 3600 * 1000; // backup diario: 2 dias sem copia indica problema
+function showBackup(st) {
+  const late = !st.last_at || Date.now() - new Date(st.last_at.replace(" ", "T")) > BACKUP_LATE_MS;
+  $("#backupbox").innerHTML = `<div class="setting"><div class="l">${st.last_at ? `Último backup: ${fmtDate(st.last_at)}` : "Nenhum backup ainda"}
+    ${late ? '<span class="tag zero">Atrasado</span>' : ""}<small>${esc(st.dir)}</small></div></div>`;
+}
+async function renderBackup() {
+  try { showBackup(await api("/backup")); } catch (e) { $("#backupbox").textContent = e.message; }
+}
+
 async function renderUsers() {
   try { const us = await api("/users");
     $("#userbox").innerHTML = us.map((u) => `<div class="setting"><div class="l">${esc(u.name)}${u.active ? "" : " (inativo)"}<small>${esc(u.username)} · ${u.role === "dono" ? "Dono" : "Atendente"}</small></div>
@@ -325,6 +345,9 @@ document.addEventListener("click", async (e) => {
     case "new": return openForm();
     case "pw": return openPw();
     case "newuser": return openUserForm();
+    case "backup": t.disabled = true;
+      try { showBackup(await api("/backup", { method: "POST" })); toast("Backup salvo."); } catch (er) { toast(er.message, true); }
+      t.disabled = false; return;
     case "logout": await api("/logout", { method: "POST" }); S.user = null; await boot(); return;
   }
 });
@@ -342,7 +365,7 @@ function render() {
 async function boot() {
   try {
     const st = await api("/state");
-    S.user = st.user; S.setupNeeded = st.setup_needed; S.minDefault = st.min_default;
+    S.user = st.user; S.setupNeeded = st.setup_needed; S.setupHere = st.setup_here; S.minDefault = st.min_default;
     if (S.user) { S.tab = "stock"; S.q = ""; S.cat = 0; await loadAll(); }
   } catch (e) { app.innerHTML = `<div class="login"><div class="err">${esc(e.message)}</div></div>`; return; }
   render();

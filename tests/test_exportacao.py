@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-import app as appmod
+from security import csv_safe
 from conftest import new_product
 
 
@@ -42,4 +42,4 @@ def test_exportacao_exige_login(app):
 @pytest.mark.parametrize("valor, esperado", [("\t=1+1", "'\t=1+1"), ("\r=1+1", "'\r=1+1"), ("=A1", "'=A1"),
                                              ("Filtro", "Filtro"), ("", ""), (3, 3), (None, None)])
 def test_csv_safe(valor, esperado):
-    assert appmod.csv_safe(valor) == esperado
+    assert csv_safe(valor) == esperado

@@ -4,20 +4,27 @@ Sistema de controle de estoque de peças, para usar no computador da oficina e n
 
 ## Como iniciar
 
-**Windows:** instale o Python (python.org, marcando *Add Python to PATH*) e dê dois cliques em `iniciar.bat`.
+**Windows:** instale o Python 3.13 (python.org, marcando *Add Python to PATH*) e dê dois cliques em `iniciar.bat`.
 **Linux/Mac:** `./iniciar.sh`
 
-Na primeira vez ele instala o que precisa. Depois mostra os endereços:
+Na primeira vez (e sempre que uma atualização mudar o `requirements.txt`) ele instala o que precisa.
+Depois mostra os endereços:
 
 - no computador: `https://localhost:8443`
 - no celular (conectado ao mesmo Wi-Fi): o endereço `https://192.168.x.x:8443` que aparece na tela
 
-No primeiro acesso, crie o usuário do dono. Depois, em **Mais → Usuários**, cadastre os atendentes.
+O **primeiro acesso** (criar o usuário do dono) só pode ser feito **no próprio computador da oficina**,
+em `https://localhost:8443` — assim ninguém no Wi-Fi se cadastra como dono antes. Depois, em **Mais → Usuários**,
+cadastre os atendentes; eles entram de qualquer aparelho da rede.
 
 > **Câmera no celular:** navegadores só liberam a câmera em conexão segura (https). O sistema gera um certificado próprio;
 > na primeira vez o celular avisa "conexão não segura". Toque em **Avançado → Continuar** (uma vez só).
-> Para o computador ligar sozinho o sistema, coloque um atalho do `iniciar.bat` na pasta *Inicializar* do Windows.
-> Dica: reserve um IP fixo para o computador no roteador, para o endereço do celular não mudar.
+
+**Abrir sozinho com o Windows:** dê dois cliques em `instalar-inicio-automatico.bat` (uma vez só). O sistema passa a
+abrir minimizado sempre que o computador ligar. Para desfazer: `remover-inicio-automatico.bat`.
+
+**Endereço fixo para o celular:** no roteador, reserve um IP fixo (reserva DHCP) para o computador da oficina;
+sem isso o endereço `192.168.x.x` pode mudar e os celulares deixam de achar o sistema.
 
 ## Como usar
 
@@ -36,8 +43,22 @@ No primeiro acesso, crie o usuário do dono. Depois, em **Mais → Usuários**, 
 
 ## Backup
 
-Todos os dados ficam na pasta `data/` (arquivo `estoque.db` e, com o sistema aberto, `estoque.db-wal`/`-shm`).
-Copie a pasta **inteira** de vez em quando para um pendrive/nuvem, de preferência com o sistema fechado.
+Os dados ficam em `data/estoque.db`. Com o sistema aberto, ele faz **uma cópia por dia sozinho**
+(ao iniciar, se a última tiver mais de 24 h, e conferindo de hora em hora) e guarda as **30 mais recentes**.
+
+**Onde a cópia fica (nuvem):**
+
+| Situação | Pasta |
+|---|---|
+| Windows com **OneDrive** ligado (detectado sozinho) | `OneDrive\Backup Estoque Maxx` → vai para a nuvem da conta Microsoft |
+| **Google Drive** ou outra pasta | defina `MAXX_BACKUP_DIR` no `iniciar.bat` (linha comentada no topo) |
+| Nenhum dos dois | `data\backups` → **só no computador**: configure uma das opções acima |
+
+Em **Mais → Backup** o dono vê a data da última cópia e a pasta, e pode clicar em **Fazer backup agora**.
+Se a última cópia tiver mais de 2 dias, aparece o aviso **Atrasado** (OneDrive desconectado, pasta errada…).
+
+**Restaurar:** feche o sistema, apague `data\estoque.db`, `estoque.db-wal` e `estoque.db-shm`, copie o backup
+desejado (`estoque-AAAA-MM-DD_HHMMSS.db`) para `data\estoque.db` e abra o sistema de novo.
 
 ## Detalhes técnicos
 

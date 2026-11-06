@@ -2,6 +2,7 @@
 import pytest
 
 import app as appmod
+from security import LoginThrottle
 
 DONO = {"username": "dono", "password": "senha-do-dono"}
 
@@ -31,7 +32,7 @@ def test_bloqueio_expira_depois_de_alguns_minutos(app, owner, clock):
     c = app.test_client()
     for i in range(5):
         login(c, "dono", f"errada{i}")
-    clock[0] += appmod.LoginThrottle.LOCK_SECONDS + 1
+    clock[0] += LoginThrottle.LOCK_SECONDS + 1
     assert login(c, **DONO).status_code == 200
 
 
@@ -47,7 +48,7 @@ def test_erros_antigos_fora_da_janela_nao_contam(app, owner, clock):
     c = app.test_client()
     for i in range(4):
         login(c, "dono", f"errada{i}")
-    clock[0] += appmod.LoginThrottle.WINDOW_SECONDS + 1
+    clock[0] += LoginThrottle.WINDOW_SECONDS + 1
     assert login(c, "dono", "errada-de-novo").status_code == 401
     assert login(c, **DONO).status_code == 200
 
