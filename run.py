@@ -9,7 +9,8 @@ import os
 import socket
 import sys
 
-from app import DATA, app
+from app import DATA, DB_PATH, app
+from backup import BackupScheduler
 
 CERT = os.path.join(DATA, "cert.pem")
 KEY = os.path.join(DATA, "key.pem")
@@ -76,7 +77,9 @@ def main():
         print(f"  No celular (mesmo Wi-Fi):  {scheme}://{ip}:{port}")
     if use_https:
         print("  No 1º acesso o celular avisa 'conexão não segura': toque em Avançado > Continuar.")
+    print(f"  Backup diário em: {app.config['BACKUP_DIR']}")
     print("  Para parar: Ctrl+C\n")
+    BackupScheduler(DB_PATH, app.config["BACKUP_DIR"]).start()
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False,
             ssl_context=(CERT, KEY) if use_https else None)
 

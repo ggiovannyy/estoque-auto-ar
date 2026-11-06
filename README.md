@@ -38,8 +38,22 @@ cadastre os atendentes; eles entram de qualquer aparelho da rede.
 
 ## Backup
 
-Todos os dados ficam na pasta `data/` (arquivo `estoque.db` e, com o sistema aberto, `estoque.db-wal`/`-shm`).
-Copie a pasta **inteira** de vez em quando para um pendrive/nuvem, de preferência com o sistema fechado.
+Os dados ficam em `data/estoque.db`. Com o sistema aberto, ele faz **uma cópia por dia sozinho**
+(ao iniciar, se a última tiver mais de 24 h, e conferindo de hora em hora) e guarda as **30 mais recentes**.
+
+**Onde a cópia fica (nuvem):**
+
+| Situação | Pasta |
+|---|---|
+| Windows com **OneDrive** ligado (detectado sozinho) | `OneDrive\Backup Estoque Maxx` → vai para a nuvem da conta Microsoft |
+| **Google Drive** ou outra pasta | defina `MAXX_BACKUP_DIR` no `iniciar.bat` (linha comentada no topo) |
+| Nenhum dos dois | `data\backups` → **só no computador**: configure uma das opções acima |
+
+Em **Mais → Backup** o dono vê a data da última cópia e a pasta, e pode clicar em **Fazer backup agora**.
+Se a última cópia tiver mais de 2 dias, aparece o aviso **Atrasado** (OneDrive desconectado, pasta errada…).
+
+**Restaurar:** feche o sistema, apague `data\estoque.db`, `estoque.db-wal` e `estoque.db-shm`, copie o backup
+desejado (`estoque-AAAA-MM-DD_HHMMSS.db`) para `data\estoque.db` e abra o sistema de novo.
 
 ## Detalhes técnicos
 

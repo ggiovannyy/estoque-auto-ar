@@ -14,6 +14,7 @@ from functools import wraps
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
 from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -83,7 +84,8 @@ def get_secret():
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = get_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
+                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
+                  BACKUP_DIR=str(default_backup_dir(DATA)))
 
 
 def db():
@@ -498,6 +500,28 @@ def set_settings():
     db().execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('min_default', ?)", (str(n),))
     db().commit()
     return jsonify(min_default=n)
+
+
+def backup_status():
+    last = last_backup_at(app.config["BACKUP_DIR"])
+    return {"dir": app.config["BACKUP_DIR"], "last_at": last.strftime("%Y-%m-%d %H:%M:%S") if last else None}
+
+
+@app.get("/api/backup")
+@login_required(owner=True)
+def get_backup():
+    return jsonify(backup_status())
+
+
+@app.post("/api/backup")
+@login_required(owner=True)
+def backup_now():
+    try:
+        make_backup(DB_PATH, app.config["BACKUP_DIR"])
+        prune_backups(app.config["BACKUP_DIR"], DEFAULT_KEEP)
+    except OSError as e:
+        return err(f"Não foi possível salvar o backup: {e}", 500)
+    return jsonify(backup_status())
 
 
 @app.get("/api/users")

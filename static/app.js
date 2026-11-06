@@ -155,6 +155,8 @@ function moreView() {
     ${owner ? `<div class="section card"><h3>Alerta de estoque baixo</h3>
       <form id="minform" class="setting"><div class="l">Avisar quando restar até<small>Cada peça pode ter seu próprio mínimo</small></div>
       <div style="display:flex;gap:8px;width:150px"><input name="min" type="number" min="0" value="${S.minDefault}" aria-label="Mínimo padrão"><button class="btn sm">OK</button></div></form></div>
+    <div class="section card"><h3>Backup</h3><div id="backupbox"><span class="muted">Carregando…</span></div>
+      <button class="btn sm ghost" data-act="backup" style="margin-top:10px">Fazer backup agora</button></div>
     <div class="section card"><h3>Categorias</h3><div id="catbox"></div>
       <form id="catform" style="display:flex;gap:8px;margin-top:10px"><input name="name" placeholder="Nova categoria" required><button class="btn sm">Adicionar</button></form></div>
     <div class="section card"><h3>Usuários</h3><div id="userbox"></div>
@@ -164,7 +166,7 @@ function moreView() {
       <div class="setting"><div class="l">${esc(S.user.name)}<small>${S.user.role === "dono" ? "Dono" : "Atendente"} · ${esc(S.user.username)}</small></div>
       <button class="btn sm ghost" data-act="pw">Trocar senha</button></div>
       <button class="btn dark block" data-act="logout" style="margin-top:8px">Sair</button></div>`);
-  if (owner) { renderCats(); renderUsers(); }
+  if (owner) { renderCats(); renderUsers(); renderBackup(); }
   const cf = $("#catform");
   cf.onsubmit = async (e) => { e.preventDefault();
     try { await api("/categories", { method: "POST", body: { name: new FormData(cf).get("name") } }); toast("Categoria criada."); await refresh(); } catch (er) { toast(er.message, true); } };
@@ -176,6 +178,16 @@ function renderCats() {
   $("#catbox").innerHTML = S.cats.map((c) => `<div class="setting"><div class="l">${esc(c.name)}<small>${c.products} peça(s)</small></div>
     <button class="btn sm ghost" data-delcat="${c.id}" aria-label="Excluir ${esc(c.name)}">Excluir</button></div>`).join("");
 }
+const BACKUP_LATE_MS = 48 * 3600 * 1000; // backup diario: 2 dias sem copia indica problema
+function showBackup(st) {
+  const late = !st.last_at || Date.now() - new Date(st.last_at.replace(" ", "T")) > BACKUP_LATE_MS;
+  $("#backupbox").innerHTML = `<div class="setting"><div class="l">${st.last_at ? `Último backup: ${fmtDate(st.last_at)}` : "Nenhum backup ainda"}
+    ${late ? '<span class="tag zero">Atrasado</span>' : ""}<small>${esc(st.dir)}</small></div></div>`;
+}
+async function renderBackup() {
+  try { showBackup(await api("/backup")); } catch (e) { $("#backupbox").textContent = e.message; }
+}
+
 async function renderUsers() {
   try { const us = await api("/users");
     $("#userbox").innerHTML = us.map((u) => `<div class="setting"><div class="l">${esc(u.name)}${u.active ? "" : " (inativo)"}<small>${esc(u.username)} · ${u.role === "dono" ? "Dono" : "Atendente"}</small></div>
@@ -333,6 +345,9 @@ document.addEventListener("click", async (e) => {
     case "new": return openForm();
     case "pw": return openPw();
     case "newuser": return openUserForm();
+    case "backup": t.disabled = true;
+      try { showBackup(await api("/backup", { method: "POST" })); toast("Backup salvo."); } catch (er) { toast(er.message, true); }
+      t.disabled = false; return;
     case "logout": await api("/logout", { method: "POST" }); S.user = null; await boot(); return;
   }
 });
