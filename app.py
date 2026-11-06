@@ -512,6 +512,16 @@ def movements():
     return jsonify([dict(r) for r in rows])
 
 
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    """Impede que o Excel execute como formula um texto digitado (ex.: '=HYPERLINK(...)')."""
+    if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 @app.get("/api/export.csv")
 @login_required()
 def export_csv():
@@ -521,9 +531,10 @@ def export_csv():
     w = csv.writer(buf, delimiter=";")
     w.writerow(["Categoria", "Nome", "Código", "Código de barras", "NCM", "Marca", "Quantidade", "Mínimo", "Situação"])
     for r in rows:
-        w.writerow([r["category"] or "", r["name"], r["code"] or "", r["barcode"] or "", r["ncm"] or "",
-                    r["brand"] or "", r["qty"], r["min_effective"], "BAIXO" if r["low"] else "ok"])
-    out = "﻿" + buf.getvalue()  # BOM para o Excel abrir com acentos
+        w.writerow([csv_safe(v) for v in (
+            r["category"] or "", r["name"], r["code"] or "", r["barcode"] or "", r["ncm"] or "",
+            r["brand"] or "", r["qty"], r["min_effective"], "BAIXO" if r["low"] else "ok")])
+    out = "\ufeff" + buf.getvalue()  # BOM para o Excel abrir com acentos
     return Response(out, mimetype="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename=estoque-{datetime.now():%Y-%m-%d}.csv"})
 
