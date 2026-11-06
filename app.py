@@ -4,9 +4,12 @@ Backend Flask + SQLite. Toda a interface fica em /static (mobile-first).
 """
 import csv
 import io
+import math
 import os
 import secrets
 import sqlite3
+import threading
+import time
 from datetime import datetime
 from functools import wraps
 
@@ -19,6 +22,58 @@ os.makedirs(DATA, exist_ok=True)
 DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
+MIN_PASSWORD = 8
+
+
+def password_error(pw):
+    if len(pw or "") < MIN_PASSWORD:
+        return f"A senha precisa ter pelo menos {MIN_PASSWORD} caracteres."
+    return None
+
+
+class LoginThrottle:
+    """Bloqueia uma chave (IP, ou IP + usuario) depois de erros de senha seguidos.
+
+    Guarda tudo em memoria: reiniciar o sistema zera os bloqueios, o que basta
+    para uma oficina com um unico servidor.
+    """
+    WINDOW_SECONDS = 15 * 60  # erros mais antigos que isso nao contam
+    LOCK_SECONDS = 5 * 60
+
+    def __init__(self, max_failures):
+        self.max_failures = max_failures
+        self.clock = time.monotonic
+        self._failures = {}      # chave -> horarios dos erros recentes
+        self._locked_until = {}  # chave -> horario em que o bloqueio acaba
+        self._lock = threading.Lock()
+
+    def retry_after(self, key):
+        """Segundos que faltam para liberar a chave (0 = liberada)."""
+        with self._lock:
+            return max(0, self._locked_until.get(key, 0) - self.clock())
+
+    def failure(self, key):
+        with self._lock:
+            now = self.clock()
+            recent = [t for t in self._failures.get(key, []) if now - t < self.WINDOW_SECONDS] + [now]
+            if len(recent) >= self.max_failures:
+                self._locked_until[key] = now + self.LOCK_SECONDS
+                recent = []
+            self._failures[key] = recent
+
+    def success(self, key):
+        with self._lock:
+            self._failures.pop(key, None)
+            self._locked_until.pop(key, None)
+
+    def reset(self):
+        with self._lock:
+            self._failures.clear()
+            self._locked_until.clear()
+
+
+user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
+ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -201,8 +256,10 @@ def setup():
         return err("O sistema já foi configurado.", 403)
     d = request.get_json(silent=True) or {}
     name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
-    if not (name and username and len(pw) >= 4):
-        return err("Informe nome, usuário e uma senha de pelo menos 4 caracteres.")
+    if not (name and username):
+        return err("Informe nome e usuário.")
+    if password_error(pw):
+        return err(password_error(pw))
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
                        (name, username.lower(), generate_password_hash(pw)))
     db().commit()
@@ -214,9 +271,17 @@ def setup():
 @app.post("/api/login")
 def login():
     d = request.get_json(silent=True) or {}
-    u = db().execute("SELECT * FROM users WHERE username=?", ((d.get("username") or "").strip().lower(),)).fetchone()
+    username = (d.get("username") or "").strip().lower()
+    ip, user_key = request.remote_addr, (request.remote_addr, username)
+    wait = max(ip_throttle.retry_after(ip), user_throttle.retry_after(user_key))
+    if wait:
+        return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
+    u = db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
     if not u or not u["active"] or not check_password_hash(u["password_hash"], d.get("password") or ""):
+        ip_throttle.failure(ip)
+        user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
+    user_throttle.success(user_key)
     session.permanent = True
     session["uid"] = u["id"]
     return jsonify(ok=True)
@@ -488,8 +553,10 @@ def add_user():
     d = request.get_json(silent=True) or {}
     name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
     role = "dono" if d.get("role") == "dono" else "atendente"
-    if not (name and username and len(pw) >= 4):
-        return err("Informe nome, usuário e uma senha de pelo menos 4 caracteres.")
+    if not (name and username):
+        return err("Informe nome e usuário.")
+    if password_error(pw):
+        return err(password_error(pw))
     try:
         db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)",
                      (name, username.lower(), generate_password_hash(pw), role))
@@ -508,8 +575,8 @@ def edit_user(uid):
             return err("Você não pode desativar o próprio usuário.")
         db().execute("UPDATE users SET active=? WHERE id=?", (1 if d["active"] else 0, uid))
     if d.get("password"):
-        if len(d["password"]) < 4:
-            return err("A senha precisa ter pelo menos 4 caracteres.")
+        if password_error(d["password"]):
+            return err(password_error(d["password"]))
         db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["password"]), uid))
     db().commit()
     return jsonify(ok=True)
@@ -522,8 +589,8 @@ def change_password():
     u = db().execute("SELECT password_hash FROM users WHERE id=?", (g.user["id"],)).fetchone()
     if not check_password_hash(u["password_hash"], d.get("current") or ""):
         return err("Senha atual incorreta.")
-    if len(d.get("new") or "") < 4:
-        return err("A nova senha precisa ter pelo menos 4 caracteres.")
+    if password_error(d.get("new")):
+        return err(password_error(d.get("new")))
     db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["new"]), g.user["id"]))
     db().commit()
     return jsonify(ok=True)

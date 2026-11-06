@@ -69,7 +69,7 @@ function authView() {
       ${setup ? `<div class="info">Primeiro acesso: crie o usuário do dono da oficina.</div>
       <label class="f"><span>Seu nome</span><input name="name" required autocomplete="name"></label>` : ""}
       <label class="f"><span>Usuário</span><input name="username" required autocapitalize="none" autocomplete="username"></label>
-      <label class="f"><span>Senha</span><input name="password" type="password" required minlength="4" autocomplete="${setup ? "new-password" : "current-password"}"></label>
+      <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="${setup ? "new-password" : "current-password"}"></label>
       <button class="btn block">${setup ? "Criar e entrar" : "Entrar"}</button>
     </form></div>`;
   $("#auth").onsubmit = async (e) => {
@@ -291,7 +291,7 @@ function openPw() {
   openSheet(`<header><h3>Trocar senha</h3><button class="x" data-close aria-label="Fechar">×</button></header>
     <form id="pwform"><div id="perr"></div>
     <label class="f"><span>Senha atual</span><input name="current" type="password" required autocomplete="current-password"></label>
-    <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="4" autocomplete="new-password"></label>
+    <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="8" autocomplete="new-password"></label>
     <button class="btn block">Salvar</button></form>`);
   $("#pwform").onsubmit = async (e) => { e.preventDefault();
     try { await api("/password", { method: "POST", body: formBody(e.target) }); closeSheet(); toast("Senha alterada."); } catch (er) { $("#perr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
@@ -301,7 +301,7 @@ function openUserForm(reset) {
     <form id="uform"><div id="uerr"></div>
     ${reset ? "" : `<label class="f"><span>Nome</span><input name="name" required></label>
     <label class="f"><span>Usuário (para entrar)</span><input name="username" required autocapitalize="none"></label>`}
-    <label class="f"><span>Senha</span><input name="password" type="password" required minlength="4" autocomplete="new-password"></label>
+    <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     ${reset ? "" : `<label class="f"><span>Perfil</span><select name="role"><option value="atendente">Atendente</option><option value="dono">Dono (acesso total)</option></select></label>`}
     <button class="btn block">Salvar</button></form>`);
   $("#uform").onsubmit = async (e) => { e.preventDefault();

@@ -16,6 +16,8 @@ import app as appmod  # noqa: E402
 def app(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "DB_PATH", str(tmp_path / "estoque.db"))
     appmod.init_db()
+    appmod.user_throttle.reset()
+    appmod.ip_throttle.reset()
     appmod.app.config.update(TESTING=True)
     return appmod.app
 
