@@ -4,7 +4,7 @@
 const S = {
   user: null, setupNeeded: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
-  q: "", cat: 0, onlyLow: false, loaded: false,
+  low: [], q: "", cat: 0, loaded: false,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -52,7 +52,12 @@ async function loadAll() {
   const [products, summary, cats] = await Promise.all([api("/products?" + qs), api("/summary"), api("/categories")]);
   S.products = products; S.summary = summary; S.cats = cats; S.loaded = true;
 }
-async function refresh() { try { await loadAll(); if (S.tab === "history") S.moves = await api("/movements?limit=100"); } catch (e) { toast(e.message, true); } render(); }
+/* Dados proprios de cada aba (independentes da busca/filtro da aba Estoque). */
+async function loadTabData() {
+  if (S.tab === "history") S.moves = await api("/movements?limit=100");
+  if (S.tab === "alerts") S.low = await api("/products?low=1");
+}
+async function refresh() { try { await loadAll(); await loadTabData(); } catch (e) { toast(e.message, true); } render(); }
 
 /* ---------------------------------------------------------------- views */
 function authView() {
@@ -118,7 +123,7 @@ function stockView() {
 }
 
 function alertsView() {
-  const low = S.products.filter((p) => p.low).sort((a, b) => a.qty - b.qty || a.name.localeCompare(b.name));
+  const low = S.low; // lista completa vinda do servidor, ja ordenada por quantidade
   shell(`<h2 class="page">Alertas de estoque</h2>
     <p class="muted" style="margin-top:-6px">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
     ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
@@ -310,7 +315,7 @@ document.addEventListener("click", async (e) => {
   const t = e.target.closest("[data-tab],[data-open],[data-cat],[data-act],[data-close],[data-delcat],[data-resetpw],[data-toggleuser]");
   if (!t) return;
   if (t.hasAttribute("data-close")) { if (t.classList.contains("overlay") && e.target !== t) return; closeSheet(); return; }
-  if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; if (S.tab === "history") S.moves = await api("/movements?limit=100").catch(() => []); if (S.tab === "stock" && (S.q || S.cat)) { /* mantem filtros */ } render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; await loadTabData().catch((er) => toast(er.message, true)); render(); window.scrollTo(0, 0); return; }
   if (t.dataset.open) return openProduct(t.dataset.open);
   if (t.dataset.cat !== undefined) { S.cat = Number(t.dataset.cat); await refresh(); return; }
   if (t.dataset.delcat) { if (!confirm("Excluir esta categoria?")) return; try { await api("/categories/" + t.dataset.delcat, { method: "DELETE" }); await refresh(); } catch (er) { toast(er.message, true); } return; }
