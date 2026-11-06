@@ -4,7 +4,7 @@
 const S = {
   user: null, setupNeeded: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
-  q: "", cat: 0, onlyLow: false, loaded: false,
+  low: [], q: "", cat: 0, loaded: false,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -52,7 +52,12 @@ async function loadAll() {
   const [products, summary, cats] = await Promise.all([api("/products?" + qs), api("/summary"), api("/categories")]);
   S.products = products; S.summary = summary; S.cats = cats; S.loaded = true;
 }
-async function refresh() { try { await loadAll(); if (S.tab === "history") S.moves = await api("/movements?limit=100"); } catch (e) { toast(e.message, true); } render(); }
+/* Dados proprios de cada aba (independentes da busca/filtro da aba Estoque). */
+async function loadTabData() {
+  if (S.tab === "history") S.moves = await api("/movements?limit=100");
+  if (S.tab === "alerts") S.low = await api("/products?low=1");
+}
+async function refresh() { try { await loadAll(); await loadTabData(); } catch (e) { toast(e.message, true); } render(); }
 
 /* ---------------------------------------------------------------- views */
 function authView() {
@@ -64,7 +69,7 @@ function authView() {
       ${setup ? `<div class="info">Primeiro acesso: crie o usuário do dono da oficina.</div>
       <label class="f"><span>Seu nome</span><input name="name" required autocomplete="name"></label>` : ""}
       <label class="f"><span>Usuário</span><input name="username" required autocapitalize="none" autocomplete="username"></label>
-      <label class="f"><span>Senha</span><input name="password" type="password" required minlength="4" autocomplete="${setup ? "new-password" : "current-password"}"></label>
+      <label class="f"><span>Senha</span><input name="password" type="password" required ${setup ? 'minlength="8" placeholder="Mínimo de 8 caracteres"' : ""} autocomplete="${setup ? "new-password" : "current-password"}"></label>
       <button class="btn block">${setup ? "Criar e entrar" : "Entrar"}</button>
     </form></div>`;
   $("#auth").onsubmit = async (e) => {
@@ -118,7 +123,7 @@ function stockView() {
 }
 
 function alertsView() {
-  const low = S.products.filter((p) => p.low).sort((a, b) => a.qty - b.qty || a.name.localeCompare(b.name));
+  const low = S.low; // lista completa vinda do servidor, ja ordenada por quantidade
   shell(`<h2 class="page">Alertas de estoque</h2>
     <p class="muted" style="margin-top:-6px">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
     ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
@@ -286,7 +291,7 @@ function openPw() {
   openSheet(`<header><h3>Trocar senha</h3><button class="x" data-close aria-label="Fechar">×</button></header>
     <form id="pwform"><div id="perr"></div>
     <label class="f"><span>Senha atual</span><input name="current" type="password" required autocomplete="current-password"></label>
-    <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="4" autocomplete="new-password"></label>
+    <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="8" autocomplete="new-password"></label>
     <button class="btn block">Salvar</button></form>`);
   $("#pwform").onsubmit = async (e) => { e.preventDefault();
     try { await api("/password", { method: "POST", body: formBody(e.target) }); closeSheet(); toast("Senha alterada."); } catch (er) { $("#perr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
@@ -296,7 +301,7 @@ function openUserForm(reset) {
     <form id="uform"><div id="uerr"></div>
     ${reset ? "" : `<label class="f"><span>Nome</span><input name="name" required></label>
     <label class="f"><span>Usuário (para entrar)</span><input name="username" required autocapitalize="none"></label>`}
-    <label class="f"><span>Senha</span><input name="password" type="password" required minlength="4" autocomplete="new-password"></label>
+    <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     ${reset ? "" : `<label class="f"><span>Perfil</span><select name="role"><option value="atendente">Atendente</option><option value="dono">Dono (acesso total)</option></select></label>`}
     <button class="btn block">Salvar</button></form>`);
   $("#uform").onsubmit = async (e) => { e.preventDefault();
@@ -310,7 +315,7 @@ document.addEventListener("click", async (e) => {
   const t = e.target.closest("[data-tab],[data-open],[data-cat],[data-act],[data-close],[data-delcat],[data-resetpw],[data-toggleuser]");
   if (!t) return;
   if (t.hasAttribute("data-close")) { if (t.classList.contains("overlay") && e.target !== t) return; closeSheet(); return; }
-  if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; if (S.tab === "history") S.moves = await api("/movements?limit=100").catch(() => []); if (S.tab === "stock" && (S.q || S.cat)) { /* mantem filtros */ } render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; await loadTabData().catch((er) => toast(er.message, true)); render(); window.scrollTo(0, 0); return; }
   if (t.dataset.open) return openProduct(t.dataset.open);
   if (t.dataset.cat !== undefined) { S.cat = Number(t.dataset.cat); await refresh(); return; }
   if (t.dataset.delcat) { if (!confirm("Excluir esta categoria?")) return; try { await api("/categories/" + t.dataset.delcat, { method: "DELETE" }); await refresh(); } catch (er) { toast(er.message, true); } return; }

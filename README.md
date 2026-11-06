@@ -36,9 +36,17 @@ No primeiro acesso, crie o usuário do dono. Depois, em **Mais → Usuários**, 
 
 ## Backup
 
-Todos os dados ficam na pasta `data/` (arquivo `estoque.db`). Copie essa pasta de vez em quando para um pendrive/nuvem.
+Todos os dados ficam na pasta `data/` (arquivo `estoque.db` e, com o sistema aberto, `estoque.db-wal`/`-shm`).
+Copie a pasta **inteira** de vez em quando para um pendrive/nuvem, de preferência com o sistema fechado.
 
 ## Detalhes técnicos
 
 Flask + SQLite, interface em JavaScript puro (sem build). Leitura por câmera com `html5-qrcode` (incluída em `static/vendor`).
 Para testes use um banco separado: `MAXX_DATA=/tmp/teste python run.py`.
+
+Testes automatizados:
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
