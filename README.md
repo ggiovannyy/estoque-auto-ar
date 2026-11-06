@@ -4,10 +4,11 @@ Sistema de controle de estoque de peças, para usar no computador da oficina e n
 
 ## Como iniciar
 
-**Windows:** instale o Python (python.org, marcando *Add Python to PATH*) e dê dois cliques em `iniciar.bat`.
+**Windows:** instale o Python 3.13 (python.org, marcando *Add Python to PATH*) e dê dois cliques em `iniciar.bat`.
 **Linux/Mac:** `./iniciar.sh`
 
-Na primeira vez ele instala o que precisa. Depois mostra os endereços:
+Na primeira vez (e sempre que uma atualização mudar o `requirements.txt`) ele instala o que precisa.
+Depois mostra os endereços:
 
 - no computador: `https://localhost:8443`
 - no celular (conectado ao mesmo Wi-Fi): o endereço `https://192.168.x.x:8443` que aparece na tela
@@ -18,8 +19,12 @@ cadastre os atendentes; eles entram de qualquer aparelho da rede.
 
 > **Câmera no celular:** navegadores só liberam a câmera em conexão segura (https). O sistema gera um certificado próprio;
 > na primeira vez o celular avisa "conexão não segura". Toque em **Avançado → Continuar** (uma vez só).
-> Para o computador ligar sozinho o sistema, coloque um atalho do `iniciar.bat` na pasta *Inicializar* do Windows.
-> Dica: reserve um IP fixo para o computador no roteador, para o endereço do celular não mudar.
+
+**Abrir sozinho com o Windows:** dê dois cliques em `instalar-inicio-automatico.bat` (uma vez só). O sistema passa a
+abrir minimizado sempre que o computador ligar. Para desfazer: `remover-inicio-automatico.bat`.
+
+**Endereço fixo para o celular:** no roteador, reserve um IP fixo (reserva DHCP) para o computador da oficina;
+sem isso o endereço `192.168.x.x` pode mudar e os celulares deixam de achar o sistema.
 
 ## Como usar
 

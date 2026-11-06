@@ -9,7 +9,12 @@ rem set "MAXX_BACKUP_DIR=G:\Meu Drive\Backup Estoque Maxx"
 if not exist .venv (
   echo Primeira vez: instalando... aguarde.
   python -m venv .venv || (echo Instale o Python em python.org e marque "Add to PATH" & pause & exit /b 1)
-  .venv\Scripts\pip install -q -r requirements.txt
+)
+rem Reinstala as dependencias so quando requirements.txt mudar (ex.: depois de uma atualizacao).
+fc /b requirements.txt .venv\requirements.installed >nul 2>&1 || (
+  echo Instalando dependencias...
+  .venv\Scripts\python -m pip install -q -r requirements.txt || (echo Falha ao instalar. Verifique a internet. & pause & exit /b 1)
+  copy /y requirements.txt .venv\requirements.installed >nul
 )
 .venv\Scripts\python run.py
 pause

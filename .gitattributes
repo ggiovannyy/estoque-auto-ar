@@ -1,0 +1,5 @@
+# Scripts do Windows precisam de CRLF em qualquer forma de download (clone ou ZIP do GitHub):
+# ficam gravados com CRLF e o Git nao os converte.
+*.bat -text
+# Scripts do Linux/Mac precisam de LF.
+*.sh  text eol=lf
