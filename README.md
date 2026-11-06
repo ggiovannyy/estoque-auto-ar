@@ -62,6 +62,8 @@ desejado (`estoque-AAAA-MM-DD_HHMMSS.db`) para `data\estoque.db` e abra o sistem
 
 ## Detalhes técnicos
 
+Contexto completo do projeto (requisitos do cliente, decisões, histórico e pendências): `docs/CONTEXTO-PROJETO.md`.
+
 Flask + SQLite, interface em JavaScript puro (sem build). Leitura por câmera com `html5-qrcode` (incluída em `static/vendor`).
 Para testes use um banco separado: `MAXX_DATA=/tmp/teste python run.py`.
 
