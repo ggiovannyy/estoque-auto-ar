@@ -1,0 +1,9 @@
+{
+  "name": "Estoque Maxx Auto Ar",
+  "short_name": "Estoque",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B2B3C",
+  "theme_color": "#0B2B3C",
+  "icons": [{ "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
