@@ -69,7 +69,7 @@ function authView() {
       ${setup ? `<div class="info">Primeiro acesso: crie o usuário do dono da oficina.</div>
       <label class="f"><span>Seu nome</span><input name="name" required autocomplete="name"></label>` : ""}
       <label class="f"><span>Usuário</span><input name="username" required autocapitalize="none" autocomplete="username"></label>
-      <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="${setup ? "new-password" : "current-password"}"></label>
+      <label class="f"><span>Senha</span><input name="password" type="password" required ${setup ? 'minlength="8" placeholder="Mínimo de 8 caracteres"' : ""} autocomplete="${setup ? "new-password" : "current-password"}"></label>
       <button class="btn block">${setup ? "Criar e entrar" : "Entrar"}</button>
     </form></div>`;
   $("#auth").onsubmit = async (e) => {
