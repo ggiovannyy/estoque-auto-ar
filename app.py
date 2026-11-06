@@ -78,7 +78,8 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 
 def db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        # timeout: quem chega enquanto outro grava espera em vez de falhar com "database is locked"
+        g.db = sqlite3.connect(DB_PATH, timeout=15)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
@@ -93,6 +94,7 @@ def close_db(_):
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")  # leituras nao bloqueiam durante uma gravacao
     conn.executescript(SCHEMA)
     if conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
         conn.executemany("INSERT INTO categories(name) VALUES (?)", [(c,) for c in SEED_CATEGORIES])
@@ -329,8 +331,14 @@ def read_product_fields(d):
 
 
 def record_move(pid, mtype, qty, note, uid):
-    """Aplica uma movimentacao de forma atomica. Retorna (saldo, erro)."""
+    """Aplica uma movimentacao. Retorna (saldo, erro).
+
+    Precisa rodar dentro de uma transacao de escrita ja aberta (BEGIN IMMEDIATE,
+    ou depois de um INSERT na mesma transacao): assim nenhum outro atendente
+    altera o saldo entre a leitura abaixo e a gravacao.
+    """
     conn = db()
+    assert conn.in_transaction, "record_move exige uma transacao de escrita aberta"
     row = conn.execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
     if not row:
         return None, "Peça não encontrada."
@@ -408,6 +416,7 @@ def move(pid):
     qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1)
     if qty is None:
         return err("Informe uma quantidade válida.")
+    db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
     new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"])
     if e:
         db().rollback()
