@@ -519,7 +519,7 @@ def backup_now():
     try:
         make_backup(DB_PATH, app.config["BACKUP_DIR"])
         prune_backups(app.config["BACKUP_DIR"], DEFAULT_KEEP)
-    except OSError as e:
+    except (OSError, sqlite3.Error) as e:
         return err(f"Não foi possível salvar o backup: {e}", 500)
     return jsonify(backup_status())
 

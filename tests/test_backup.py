@@ -124,3 +124,16 @@ def test_atendente_nao_acessa_backup(app, attendant, tmp_path):
     app.config["BACKUP_DIR"] = str(tmp_path / "bk")
     assert attendant.get("/api/backup").status_code == 403
     assert attendant.post("/api/backup").status_code == 403
+
+
+@pytest.mark.parametrize("falha", [OSError("disco cheio"), sqlite3.OperationalError("disk I/O error")])
+def test_falha_no_backup_manual_vira_mensagem_clara(app, owner, tmp_path, monkeypatch, falha):
+    import app as appmod
+
+    def quebra(*_a, **_k):
+        raise falha
+    app.config["BACKUP_DIR"] = str(tmp_path / "bk")
+    monkeypatch.setattr(appmod, "make_backup", quebra)
+    r = owner.post("/api/backup")
+    assert r.status_code == 500
+    assert "Não foi possível salvar o backup" in r.get_json()["error"]
