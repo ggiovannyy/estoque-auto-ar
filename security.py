@@ -61,3 +61,28 @@ def csv_safe(value):
     if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
         return "'" + value
     return value
+
+
+# A interface so carrega os proprios arquivos; as fontes vem do Google Fonts.
+# 'unsafe-inline' em style-src: os templates usam style="..." pontuais (nao ha script inline).
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+}

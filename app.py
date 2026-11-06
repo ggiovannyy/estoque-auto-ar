@@ -14,7 +14,7 @@ from functools import wraps
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from security import LoginThrottle, csv_safe, password_error
+from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
@@ -185,7 +185,8 @@ def manifest():
 
 
 @app.after_request
-def no_cache_api(resp):
+def add_response_headers(resp):
+    resp.headers.update(SECURITY_HEADERS)
     if request.path.startswith("/api/"):
         resp.headers["Cache-Control"] = "no-store"
     return resp

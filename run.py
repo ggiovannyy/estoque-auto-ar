@@ -69,6 +69,7 @@ def main():
     use_https = not a.http and ensure_cert(ips)
     port = a.port or (8443 if use_https else 8000)
     scheme = "https" if use_https else "http"
+    app.config["SESSION_COOKIE_SECURE"] = use_https  # cookie de login nunca trafega sem criptografia
     print("\n  Estoque Maxx Auto Ar no ar!")
     print(f"  Neste computador:  {scheme}://localhost:{port}")
     for ip in ips:
