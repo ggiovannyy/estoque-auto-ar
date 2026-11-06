@@ -42,3 +42,10 @@ Todos os dados ficam na pasta `data/` (arquivo `estoque.db`). Copie essa pasta d
 
 Flask + SQLite, interface em JavaScript puro (sem build). Leitura por câmera com `html5-qrcode` (incluída em `static/vendor`).
 Para testes use um banco separado: `MAXX_DATA=/tmp/teste python run.py`.
+
+Testes automatizados:
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
