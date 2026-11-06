@@ -23,6 +23,10 @@ DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
 
+# O primeiro acesso cria o dono: so pode ser feito no computador onde o sistema roda,
+# para ninguem no Wi-Fi da oficina se cadastrar como dono antes dele.
+LOCAL_ADDRESSES = {"127.0.0.1", "::1"}
+
 user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
 ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
 
@@ -198,6 +202,7 @@ def state():
     users = db().execute("SELECT COUNT(*) FROM users").fetchone()[0]
     u = current_user()
     return jsonify(setup_needed=users == 0,
+                   setup_here=request.remote_addr in LOCAL_ADDRESSES,
                    user=dict(u) if u else None,
                    min_default=min_default())
 
@@ -206,6 +211,8 @@ def state():
 def setup():
     if db().execute("SELECT COUNT(*) FROM users").fetchone()[0]:
         return err("O sistema já foi configurado.", 403)
+    if request.remote_addr not in LOCAL_ADDRESSES:
+        return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
     d = request.get_json(silent=True) or {}
     name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
     if not (name and username):

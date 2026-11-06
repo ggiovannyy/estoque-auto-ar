@@ -12,7 +12,9 @@ Na primeira vez ele instala o que precisa. Depois mostra os endereços:
 - no computador: `https://localhost:8443`
 - no celular (conectado ao mesmo Wi-Fi): o endereço `https://192.168.x.x:8443` que aparece na tela
 
-No primeiro acesso, crie o usuário do dono. Depois, em **Mais → Usuários**, cadastre os atendentes.
+O **primeiro acesso** (criar o usuário do dono) só pode ser feito **no próprio computador da oficina**,
+em `https://localhost:8443` — assim ninguém no Wi-Fi se cadastra como dono antes. Depois, em **Mais → Usuários**,
+cadastre os atendentes; eles entram de qualquer aparelho da rede.
 
 > **Câmera no celular:** navegadores só liberam a câmera em conexão segura (https). O sistema gera um certificado próprio;
 > na primeira vez o celular avisa "conexão não segura". Toque em **Avançado → Continuar** (uma vez só).

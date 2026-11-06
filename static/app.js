@@ -2,7 +2,7 @@
 /* Estoque Maxx Auto Ar - interface (JS puro, sem build). */
 
 const S = {
-  user: null, setupNeeded: false, minDefault: 2,
+  user: null, setupNeeded: false, setupHere: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
   low: [], q: "", cat: 0, loaded: false,
 };
@@ -61,6 +61,7 @@ async function refresh() { try { await loadAll(); await loadTabData(); } catch (
 
 /* ---------------------------------------------------------------- views */
 function authView() {
+  if (S.setupNeeded && !S.setupHere) return setupElsewhereView();
   const setup = S.setupNeeded;
   app.innerHTML = `<div class="login">
     <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
@@ -78,6 +79,13 @@ function authView() {
     try { await api(setup ? "/setup" : "/login", { method: "POST", body }); await boot(); }
     catch (er) { $("#autherr").innerHTML = `<div class="err">${esc(er.message)}</div>`; }
   };
+}
+
+function setupElsewhereView() {
+  app.innerHTML = `<div class="login">
+    <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
+    <div class="info">O sistema ainda não foi configurado. Faça o primeiro acesso no computador da oficina,
+      em <b>https://localhost:8443</b>, para criar o usuário do dono. Depois é só entrar por aqui.</div></div>`;
 }
 
 function shell(inner) {
@@ -342,7 +350,7 @@ function render() {
 async function boot() {
   try {
     const st = await api("/state");
-    S.user = st.user; S.setupNeeded = st.setup_needed; S.minDefault = st.min_default;
+    S.user = st.user; S.setupNeeded = st.setup_needed; S.setupHere = st.setup_here; S.minDefault = st.min_default;
     if (S.user) { S.tab = "stock"; S.q = ""; S.cat = 0; await loadAll(); }
   } catch (e) { app.innerHTML = `<div class="login"><div class="err">${esc(e.message)}</div></div>`; return; }
   render();
