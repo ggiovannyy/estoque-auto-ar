@@ -133,7 +133,7 @@ button.stat.warn b { color: #8a5a00; }
 .x { border: 0; background: var(--paper); width: 40px; height: 40px; border-radius: 50%; font-size: 1.3rem; flex: none; }
 .bigqty { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .bigqty b { font: 700 3.2rem/1 var(--font-h); }
-.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: #dbe9ee; border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 12px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: #dbe9ee; border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 12px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; padding: 10px 4px; font-weight: 600; color: var(--ink-2); min-height: 44px; }
 .seg button[aria-pressed="true"] { background: var(--paper); box-shadow: 0 1px 3px rgb(0 0 0 / .15); }
 .seg button[aria-pressed="true"].in { color: var(--green); }

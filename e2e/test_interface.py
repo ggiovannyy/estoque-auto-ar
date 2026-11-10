@@ -173,3 +173,5 @@ def test_atendente_nao_ve_a_contagem_e_o_dono_ve(page, attendant_page, api):
         pg.locator(f'[data-open="{p["id"]}"]').click()
         expect(pg.locator('[data-type="out"]')).to_be_visible()
         expect(pg.locator('[data-type="adjust"]')).to_have_count(1 if sees_count else 0)
+        seg, last = pg.locator(".seg").bounding_box(), pg.locator(".seg button").last.bounding_box()
+        assert seg["x"] + seg["width"] - (last["x"] + last["width"]) < 8, "sobrou espaço vazio no seletor"
