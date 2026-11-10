@@ -130,6 +130,15 @@ def clean(v):
     return v or None
 
 
+def normalize_barcode(v):
+    """A câmera pode ler um UPC-A (12 dígitos) e o leitor USB o mesmo código como EAN-13 (com um 0
+    na frente). Grava e busca sempre com 13 dígitos para os dois acharem a mesma peça."""
+    code = clean(v)
+    if code and len(code) == 12 and code.isascii() and code.isdigit():
+        return "0" + code
+    return code
+
+
 def to_int(v, default=None, minimum=0):
     try:
         n = int(v)
@@ -280,7 +289,7 @@ def fetch_product(pid=None, barcode=None):
 @app.get("/api/products/barcode/<path:code>")
 @login_required()
 def by_barcode(code):
-    r = fetch_product(barcode=code.strip())
+    r = fetch_product(barcode=normalize_barcode(code))
     if not r:
         return err("Peça não cadastrada.", 404)
     return jsonify(product_dict(r))
@@ -306,7 +315,7 @@ def read_product_fields(d):
         return None, "Informe o nome da peça."
     min_raw = d.get("min_qty")
     return {
-        "barcode": clean(d.get("barcode")),
+        "barcode": normalize_barcode(d.get("barcode")),
         "code": clean(d.get("code")),
         "name": name,
         "category_id": to_int(d.get("category_id")),

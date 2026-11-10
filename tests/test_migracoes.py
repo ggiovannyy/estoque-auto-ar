@@ -124,6 +124,34 @@ def test_recusa_banco_de_versao_mais_nova(conn):
     assert schema_version(conn) == len(MIGRATIONS) + 1
 
 
+def v1_with_products(conn, *barcodes):
+    migrate(conn, MIGRATIONS[:1])
+    conn.executemany("INSERT INTO products(barcode, name, created_at) VALUES (?, ?, '2026-11-10 10:00:00')",
+                     [(b, f"Peça {i}") for i, b in enumerate(barcodes, start=1)])
+    conn.commit()
+
+
+def test_v2_grava_codigos_upc_a_com_13_digitos(conn):
+    v1_with_products(conn, "036000291452", "7891234567895", "ABC-12345678", "12345670", None)
+
+    migrate(conn)
+
+    assert schema_version(conn) == len(MIGRATIONS)
+    assert [r[0] for r in conn.execute("SELECT barcode FROM products ORDER BY id")] == [
+        "0036000291452", "7891234567895", "ABC-12345678", "12345670", None]
+
+
+def test_v2_para_e_avisa_se_o_upc_a_e_o_ean_13_ja_sao_pecas_diferentes(conn):
+    v1_with_products(conn, "036000291452", "0036000291452")
+
+    with pytest.raises(RuntimeError, match="Peça 1.*Peça 2"):
+        migrate(conn)
+
+    assert schema_version(conn) == 1
+    assert [r[0] for r in conn.execute("SELECT barcode FROM products ORDER BY id")] == [
+        "036000291452", "0036000291452"]
+
+
 def test_init_db_migra_o_banco_do_sistema(tmp_path, monkeypatch):
     path = tmp_path / "estoque.db"
     legacy = sqlite3.connect(path)
