@@ -276,9 +276,14 @@ a97e956 Sistema de estoque Maxx Auto Ar
 3. Revisão com `/addy-review` (5 eixos). Os itens 1 a 5 foram corrigidos no PR #1, com testes escritos antes de cada
    correção e verificação por mutação.
 4. "Itens rápidos" no PR #2 (backup, início automático, primeiro acesso local, cabeçalhos, versões fixas, CRLF).
+5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
+   (PR #3), `iniciar.bat` usando o `py` (PR #4) e migrações do banco (PR #5).
 
-**PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1) e
-[#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2), ambos juntados à `main`.
+**PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
+[#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
+[#3](https://github.com/ggiovannyy/estoque-auto-ar/pull/3) e
+[#4](https://github.com/ggiovannyy/estoque-auto-ar/pull/4), juntados à `main`;
+[#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5), migrações.
 
 ---
 
@@ -286,14 +291,16 @@ a97e956 Sistema de estoque Maxx Auto Ar
 
 ### 8.1 Imediatas (testes na máquina do desenvolvedor e na oficina)
 
-- [ ] **Rodar na máquina Windows do desenvolvedor.**
-  - Ela tem o **Python Install Manager** (instalador novo do python.org, comando `py`), versão 26.4.
-  - **Ainda não foi confirmado** se há um runtime instalado: rodar `py list`. Se vier vazio, `py install 3.13`.
-  - O `iniciar.bat` usa `python -m venv`. Se o alias `python` não funcionar com o Install Manager, adaptar o `.bat`
-    para tentar `py -3.13` como alternativa.
+- [x] **Rodar na máquina Windows do desenvolvedor.** Feito em 08/11/2026 (Windows 11, Python 3.14.4 pelo Install
+  Manager). Lá o comando `python` cai no atalho da Microsoft Store; o `iniciar.bat` agora tenta `py -3` primeiro
+  (PR #4). Projeto em `Documentos\Maxx Auto Ar\estoque-auto-ar`, que fica dentro do OneDrive.
 - [ ] **Liberar o Python no Firewall do Windows** ("Redes privadas"), senão o celular não conecta.
-- [ ] **Testar os `.bat` no Windows.** Nunca foram executados: `iniciar.bat`, `instalar-inicio-automatico.bat` e
-  `remover-inicio-automatico.bat`.
+- [ ] **Testar os `.bat` no Windows.**
+  - `iniciar.bat`: testado pelo `cmd` (primeira execução instala e sobe o https; a segunda pula a instalação).
+    Falta abrir com dois cliques pelo Explorador.
+  - `instalar-inicio-automatico.bat` e `remover-inicio-automatico.bat`: nunca executados.
+- [ ] **Instalar na oficina em pasta de caminho curto** (ex.: `C:\MaxxEstoque`). Num caminho muito longo, a geração
+  do certificado falhou ("nome do arquivo muito grande") e o sistema caiu para http, sem câmera no celular.
 - [ ] **Testar a câmera em celular real** (Android e iPhone). Confirmar o fluxo do certificado autoassinado,
   principalmente no iPhone/Safari.
 - [ ] **Testar o leitor USB real.** Confirmar que envia Enter. Ver também a divergência UPC-A (12 dígitos) × EAN-13
@@ -302,8 +309,7 @@ a97e956 Sistema de estoque Maxx Auto Ar
 - [ ] **Reservar IP fixo** (reserva DHCP) para o computador da oficina no roteador.
 - [ ] **Demonstrar ao cliente e validar.**
 - [ ] Na instalação da oficina, usar uma cópia **sem** a pasta `data/` dos testes.
-- [ ] **Excluir as branches já juntadas no GitHub** (`fix/revisao-itens-1-5`, `melhorias/itens-rapidos`). A sessão na
-  nuvem não tinha permissão; dá para excluir pelo botão "Delete branch" de cada PR.
+- [x] **Excluir as branches já juntadas no GitHub.** Feito em 10/11/2026.
 
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
@@ -400,8 +406,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Conferir o Python no Windows (`py list`; se vazio, `py install 3.13`) e rodar `iniciar.bat`. Adaptar o `.bat` se o
-   comando `python` não funcionar com o Install Manager.
-3. Rodar `pytest -q` na máquina local (esperado: 69 passed).
-4. Fazer os testes da seção 8.1 que forem possíveis na máquina do desenvolvedor (computador e celular no mesmo Wi-Fi).
-5. Depois, atacar o item 9 (migrações) antes de qualquer mudança de esquema, e seguir com os demais itens da 8.2.
+2. Rodar `pytest -q` (esperado: 76 passed).
+3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
+   no mesmo Wi-Fi com câmera e certificado, leitor USB).
+4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
