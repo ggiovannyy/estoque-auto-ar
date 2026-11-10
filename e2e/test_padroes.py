@@ -47,3 +47,19 @@ def test_controles_e_textos_tem_tamanho_confortavel_no_celular(phone):
     page.get_by_text("Editar dados da peça").click()
     page.locator("#editform button.btn").first.scroll_into_view_if_needed()
     check(page, "edição")
+
+
+@pytest.mark.parametrize("tab,title", [("stock", "Estoque"), ("alerts", "Alertas de estoque"), ("scan", "Escanear peça"),
+                                       ("history", "Histórico"), ("more", "Mais")])
+def test_cada_aba_tem_titulo_e_a_pagina_um_h1(page, tab, title):
+    page.goto("/")
+    page.locator(f'nav.tabs [data-tab="{tab}"]').click()
+    expect(page.get_by_role("heading", level=2, name=title)).to_have_count(1)
+    expect(page.get_by_role("heading", level=1)).to_have_accessible_name("Maxx Auto Ar")
+    assert page.locator("#app").get_attribute("aria-live") is None  # não relê a página inteira a cada mudança
+
+
+def test_campo_de_nova_categoria_tem_rotulo(page):
+    page.goto("/")
+    page.locator('nav.tabs [data-tab="more"]').click()
+    expect(page.get_by_label("Nova categoria")).to_be_visible()

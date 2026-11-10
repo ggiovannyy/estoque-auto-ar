@@ -160,8 +160,8 @@ function shell(inner) {
     const dot = k === "alerts" && lowCount() ? `<span class="dot">${lowCount()}</span>` : "";
     return `<button data-tab="${k}"${cur}>${svg(ic)}${label}${dot}</button>`; }).join("");
   app.innerHTML = `<div class="shell">
-    <header class="top"><picture class="brand"><source media="(min-width: 900px)" srcset="/static/logo.png">
-      <img src="/static/logo-sem-slogan.png" alt="Maxx Auto Ar"></picture>
+    <header class="top"><h1 class="brand"><picture><source media="(min-width: 900px)" srcset="/static/logo.png">
+      <img src="/static/logo-sem-slogan.png" alt="Maxx Auto Ar"></picture></h1>
       <div class="who">${esc(S.user.name)}</div></header>
     <nav class="tabs" aria-label="Seções">${nav}</nav>
     <main><div class="wrap">${inner}</div></main></div>`;
@@ -192,7 +192,7 @@ function stockView() {
     : `<div class="empty">${S.q || S.cat ? "Nenhuma peça encontrada." : "Nenhuma peça cadastrada ainda.<br>Toque em <b>+ Nova peça</b> ou use <b>Escanear</b>."}</div>`;
   const chips = [`<button class="chip" data-cat="0" aria-pressed="${!S.cat}">Todas</button>`]
     .concat(S.cats.filter((c) => c.products || c.id === S.cat).map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${S.cat === c.id}">${esc(c.name)} (${c.products})</button>`)).join("");
-  shell(`<div class="stats">
+  shell(`<h2 class="sr">Estoque</h2><div class="stats">
       <div class="stat"><b>${s.items}</b><span>peças cadastradas</span></div>
       <div class="stat"><b>${s.units}</b><span>unidades</span></div>
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
@@ -226,6 +226,8 @@ function historyView() {
   shell(`<h2 class="page">Histórico</h2><div class="card">${rows || '<div class="empty">Sem movimentações ainda.</div>'}</div>`);
 }
 
+const CAT_FORM = `<form id="catform" class="inline-form"><label class="grow"><span class="sr">Nova categoria</span>
+  <input name="name" placeholder="Nova categoria" required></label><button class="btn sm">Adicionar</button></form>`;
 function moreView() {
   const owner = S.user.role === "dono";
   shell(`<h2 class="page">Mais</h2>
@@ -237,10 +239,10 @@ function moreView() {
     <div class="section card"><h3>Backup</h3><div id="backupbox"><span class="muted">Carregando…</span></div>
       <button class="btn sm ghost" data-act="backup" style="margin-top:10px">Fazer backup agora</button></div>
     <div class="section card"><h3>Categorias</h3><div id="catbox"></div>
-      <form id="catform" style="display:flex;gap:8px;margin-top:10px"><input name="name" placeholder="Nova categoria" required><button class="btn sm">Adicionar</button></form></div>
+      ${CAT_FORM}</div>
     <div class="section card"><h3>Usuários</h3><div id="userbox"></div>
       <button class="btn sm ghost" data-act="newuser" style="margin-top:10px">+ Novo usuário</button></div>` : `<div class="section card"><h3>Categorias</h3>
-      <form id="catform" style="display:flex;gap:8px"><input name="name" placeholder="Nova categoria" required><button class="btn sm">Adicionar</button></form></div>`}
+      ${CAT_FORM}</div>`}
     <div class="section card"><h3>Minha conta</h3>
       <div class="setting"><div class="l">${esc(S.user.name)}<small>${S.user.role === "dono" ? "Dono" : "Atendente"} · ${esc(S.user.username)}</small></div>
       <button class="btn sm ghost" data-act="pw">Trocar senha</button></div>

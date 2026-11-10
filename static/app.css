@@ -32,6 +32,9 @@ button { cursor: pointer; }
 h1, h2, h3 { font-family: var(--font-h); margin: 0; letter-spacing: .01em; }
 :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .sr { position: absolute; left: -9999px; }
+h1.brand { margin: 0; font-size: inherit; line-height: 0; }
+.inline-form { display: flex; gap: 8px; margin-top: 10px; }
+.inline-form .grow { flex: 1; min-width: 0; }
 .muted { color: var(--muted); }
 
 /* ---------- shell ---------- */
