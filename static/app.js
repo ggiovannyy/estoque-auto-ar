@@ -361,8 +361,9 @@ async function openProduct(id) {
     <div id="merr"></div>
     <div class="seg" role="group" aria-label="Tipo de movimentação">
       <button class="out" data-type="out" aria-pressed="true">Saída</button><button class="in" data-type="in" aria-pressed="false">Entrada</button>${owner ? '<button data-type="adjust" aria-pressed="false">Contagem</button>' : ""}</div>
-    <div class="stepper"><button data-step="-1" aria-label="Menos">−</button><input id="mqty" type="number" inputmode="numeric" min="1" value="1" aria-label="Quantidade"><button data-step="1" aria-label="Mais">+</button></div>
-    <label class="f"><span id="nlabel">Observação (opcional)</span><input id="mnote" placeholder="Ex.: venda sem nota, OS 123"></label>
+    <span class="flabel" id="qlabel">Quantidade</span>
+    <div class="stepper"><button data-step="-1" aria-label="Menos">−</button><input id="mqty" type="number" inputmode="numeric" min="1" value="1" aria-labelledby="qlabel"><button data-step="1" aria-label="Mais">+</button></div>
+    <label class="f"><span>Observação (opcional)</span><input id="mnote" placeholder="Ex.: venda sem nota, OS 123"></label>
     <button class="btn block" id="mgo">Registrar saída</button>
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
@@ -372,7 +373,7 @@ async function openProduct(id) {
     sheetRoot.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.type === t));
     go.textContent = t === "in" ? "Registrar entrada" : t === "out" ? "Registrar saída" : "Salvar contagem";
     qty.min = t === "adjust" ? 0 : 1; qty.value = t === "adjust" ? p.qty : 1;
-    $("#nlabel").textContent = t === "adjust" ? "Quantidade real contada" : "Observação (opcional)"; };
+    $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; };
   sheetRoot.querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
   sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => {
     qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step));

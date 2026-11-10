@@ -45,3 +45,18 @@ def test_botao_fica_travado_enquanto_envia_e_volta_depois_do_erro(page, api):
     expect(button).to_be_disabled()
     expect(page.locator("#ferr .err")).to_contain_text("código de barras")
     expect(button).to_be_enabled()  # dá para corrigir e enviar de novo
+
+
+# ---------------------------------------------------------------- contagem (FE-02)
+def test_contagem_nao_troca_o_rotulo_da_observacao(page, api):
+    p = api.product(qty=4)
+    page.goto("/")
+    open_product(page, p)
+    page.locator('[data-type="adjust"]').click()
+
+    expect(page.get_by_label("Quantidade contada")).to_have_value("4")
+    expect(page.get_by_label("Observação (opcional)")).to_be_visible()
+    expect(page.get_by_text("Quantidade real contada")).to_have_count(0)
+
+    page.locator('[data-type="out"]').click()
+    expect(page.get_by_label("Quantidade", exact=True)).to_have_value("1")

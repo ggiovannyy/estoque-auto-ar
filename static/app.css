@@ -75,7 +75,7 @@ nav.tabs .dot { position: absolute; top: 8px; left: calc(50% + 6px); min-width: 
 .btn.sm { min-height: 38px; padding: 6px 12px; font-size: .9rem; }
 .btn[disabled] { opacity: .5; }
 label.f { display: block; margin-bottom: 12px; }
-label.f > span { display: block; font-weight: 600; font-size: .86rem; margin-bottom: 4px; color: var(--ink-2); }
+label.f > span, .flabel { display: block; font-weight: 600; font-size: .86rem; margin-bottom: 4px; color: var(--ink-2); }
 input, select, textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; min-height: 46px; }
 input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgb(0 98 177 / .18); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
