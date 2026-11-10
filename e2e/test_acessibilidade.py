@@ -1,5 +1,6 @@
 """Contraste (WCAG 2.2 AA) de todo texto visível e da borda dos campos, em cada tela."""
 import pytest
+from dados import unique_barcode
 from playwright.sync_api import expect
 
 # Para cada elemento com texto próprio e visível por cima de tudo: contraste da cor do texto com o primeiro fundo
@@ -12,6 +13,8 @@ AUDIT = """() => {
     .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
   const ratio = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   const bgAt = (el, x, y, skipSelf) => {
+    // Fundo do próprio elemento primeiro: elementsFromPoint ignora quem tem pointer-events: none (o aviso rápido).
+    if (!skipSelf && opaque(el)) return getComputedStyle(el).backgroundColor;
     const behind = document.elementsFromPoint(x, y).filter((e) => (skipSelf ? e !== el : true) && (e === el || !el.contains(e))).find(opaque);
     return getComputedStyle(behind || document.body).backgroundColor;
   };
@@ -59,6 +62,15 @@ def test_todo_texto_das_telas_tem_contraste_suficiente(page, api, width):
         page.locator(f'nav.tabs [data-tab="{tab}"]').click()
         page.wait_for_load_state("networkidle")
         audit(page, tab)
+    page.locator('nav.tabs [data-tab="scan"]').click()  # leitura em sequência com peça e código desconhecido
+    page.get_by_role("button", name="Leitura em sequência").click()
+    for code in (api.product(barcode=unique_barcode())["barcode"], unique_barcode()):
+        page.fill("#code", code)
+        page.press("#code", "Enter")
+    expect(page.locator("#batch .unknown")).to_be_visible()
+    page.locator("body").click(position={"x": 2, "y": 2})
+    audit(page, "leitura em sequência")
+    page.get_by_role("button", name="Uma peça por vez").click()
     page.locator('nav.tabs [data-tab="stock"]').click()
     for p in (low, ok):
         page.locator(f'[data-open="{p["id"]}"]').click()

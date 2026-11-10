@@ -290,11 +290,12 @@ async function stopCamera() {
   scanner = null;
 }
 function scanView() {
-  shell(`<h2 class="page">Escanear peça</h2>
+  shell(`<h2 class="page">Escanear peça</h2>${scanModeHtml()}
     <div id="reader" hidden></div>
     <form id="scanform" class="scanbox"><input id="code" inputmode="text" autocomplete="off" placeholder="Leia o código de barras ou digite" aria-label="Código de barras"><button class="btn">Buscar</button></form>
     <button class="btn block ghost" id="cam">Usar a câmera do celular</button>
-    <p class="muted" style="margin-top:14px">Com o leitor de código de barras, basta clicar no campo e ler a peça. Se ela já existir, abre para dar entrada ou saída; se não, abre o cadastro.</p>`);
+    <div id="batch"></div>`);
+  renderSeq();
   const input = $("#code");
   if (hasMouse()) input.focus();
   $("#scanform").onsubmit = (e) => {
@@ -318,13 +319,14 @@ async function startCamera() {
   });
   try {
     await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: (w) => ({ width: Math.min(300, w - 20), height: 150 }) },
-      async (text) => { beep(); await stopCamera(); handleCode(text); }, () => {});
+      async (text) => { if (seqCameraRead(text)) return; beep(); await stopCamera(); handleCode(text); }, () => {});
   } catch (e) {
     scanner = null; box.hidden = true; btn.textContent = "Usar a câmera do celular";
     toast("Não consegui abrir a câmera. Verifique a permissão no navegador.", true);
   }
 }
 async function handleCode(code) {
+  if (SEQ.on) return seqAdd(code); // leitura em sequência: entra na lista, sem abrir nada
   try { const p = await api("/products/barcode/" + encodeURIComponent(code)); openProduct(p.id); }
   catch (e) {
     if (e.status === 404) { toast("Peça nova — preencha o cadastro."); openForm({ barcode: code }); }
@@ -389,7 +391,7 @@ function productFields(p = {}) {
     <label class="f"><span>Mínimo para avisar (vazio = padrão ${S.minDefault})</span><input name="min_qty" type="number" min="0" value="${p.min_qty ?? ""}"></label>`;
 }
 
-function openForm(prefill = {}) {
+function openForm(prefill = {}, onCreated) {
   openSheet(`<header><h3>Nova peça</h3><button class="x" data-close aria-label="Fechar">×</button></header>
     <form id="newform"><div id="ferr"></div>${productFields(prefill)}
     <label class="f"><span>Quantidade em estoque agora</span><input name="qty" type="number" min="0" value="1"></label>
@@ -398,6 +400,7 @@ function openForm(prefill = {}) {
     try {
       const p = await api("/products", { method: "POST", body: formBody(f) });
       closeSheet(); toast(`${p.name} cadastrada (${p.qty} un.).`);
+      if (onCreated) onCreated(p);
       S.tab = S.tab === "scan" ? "scan" : "stock"; await refresh();
     } catch (er) { showError("#ferr", er); }
   });

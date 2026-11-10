@@ -137,6 +137,14 @@ button.stat.warn b { color: #8a5a00; }
 #reader video { border-radius: var(--radius); }
 .scanbox { display: flex; gap: 8px; margin-bottom: 12px; }
 .scanbox input { font-size: 1.1rem; letter-spacing: .04em; }
+#batch { margin-top: 14px; }
+#batch .list { margin: 10px 0; }
+.bitem { padding: 10px 10px 10px 14px; }
+.bitem input { width: 84px; flex: none; text-align: center; font: 700 1.2rem var(--font-h); }
+.unknown { display: flex; align-items: center; gap: 8px; background: var(--amber-bg); border-radius: var(--radius); padding: 8px 10px 8px 14px; margin-bottom: 8px; }
+.unknown span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.batchform { margin-top: 12px; display: grid; gap: 8px; }
+.btn.adjust { background: var(--blue); }
 
 /* ---------- sheet ---------- */
 .overlay { position: fixed; inset: 0; background: rgb(6 25 36 / .55); z-index: 20; display: flex; align-items: flex-end; justify-content: center; animation: fade .15s ease-out; }
