@@ -27,6 +27,7 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `security.py`: senha, limitador de login, CSV e cabeçalhos.
   - `backup.py`: backup diário para a pasta do OneDrive ou do Google Drive.
   - `tls.py`: certificado https autoassinado nas regras da Apple (senão o iPhone recusa sem opção de continuar).
+  - `server.py`: servidor web (Werkzeug) com o handshake https na thread de cada conexão e tempo limite.
   - `run.py`: garante o certificado, inicia o backup e o servidor.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
@@ -41,9 +42,9 @@ arquitetura, decisões, histórico e a lista de pendências.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
-pytest -q                                   # 95 testes da API (pasta tests/)
+pytest -q                                   # 97 testes da API (pasta tests/)
 pytest -q e2e                               # 10 testes de interface no navegador (pasta e2e/)
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```
@@ -59,6 +60,8 @@ python run.py --http --port 8000            # sem https (câmera do celular não
 - Movimentação de estoque roda em `BEGIN IMMEDIATE` (`record_move` exige transação aberta). Sem isso, há perda de
   quantidade com acessos simultâneos (`tests/test_concorrencia.py`).
 - Primeiro acesso (`/api/setup`) só de 127.0.0.1/::1.
+- O servidor sobe pelo `server.make_server`, nunca por `app.run(ssl_context=...)`: o Werkzeug faria o handshake https
+  no `accept()`, e uma única conexão parada travaria o sistema para todos (`tests/test_servidor.py`).
 - A tela de login não exige 8 caracteres: senhas antigas mais curtas continuam valendo. O mínimo vale só para senha
   nova.
 - Todo texto do usuário no `app.js` passa por `esc()`. O CSV passa por `csv_safe()`.

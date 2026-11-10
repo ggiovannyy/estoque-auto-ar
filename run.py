@@ -11,6 +11,7 @@ import sys
 
 from app import DATA, DB_PATH, app
 from backup import BackupScheduler
+from server import make_server
 from tls import ensure_cert
 
 CERT = os.path.join(DATA, "cert.pem")
@@ -49,8 +50,13 @@ def main():
     print(f"  Backup diário em: {app.config['BACKUP_DIR']}")
     print("  Para parar: Ctrl+C\n")
     BackupScheduler(DB_PATH, app.config["BACKUP_DIR"]).start()
-    app.run(host="0.0.0.0", port=port, threaded=True, debug=False,
-            ssl_context=(CERT, KEY) if use_https else None)
+    server = make_server(app, "0.0.0.0", port, cert_files=(CERT, KEY) if use_https else None)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
