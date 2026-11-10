@@ -316,7 +316,7 @@ a97e956 Sistema de estoque Maxx Auto Ar
 6. Testes práticos: certificado https nas regras da Apple, que o iPhone recusava (PR #13).
 7. Auditoria do backend (10/11/2026), com a lista de achados BE-01 a BE-19. Fase 1: servidor https que travava
    com uma conexão parada (BE-01, PR #14); não abrir em http sem certificado, teto de quantidade, contagem só do
-   dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #15).
+   dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #16).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -391,11 +391,11 @@ para o porte.
 | ID | Sev. | Achado | Situação |
 |---|---|---|---|
 | BE-01 | Crítica | Uma conexão parada travava o servidor https para todos | Corrigido (PR #14) |
-| BE-02 | Alta | Sem certificado, o sistema abria em http em silêncio | Corrigido (PR #15) |
+| BE-02 | Alta | Sem certificado, o sistema abria em http em silêncio | Corrigido (PR #16) |
 | BE-08 | Alta | Certificado autoassinado + Wi-Fi dos clientes: ataque no meio da conexão | **Operação:** rede de visitantes isolada |
-| BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #15) |
-| BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #15) |
-| BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #15) |
+| BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #16) |
+| BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #16) |
+| BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #16) |
 | BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Fase 2 |
 | BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Fase 2 |
 | BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Fase 2 |
