@@ -314,18 +314,48 @@ async function handleCode(code) {
 }
 
 /* ---------------------------------------------------------------- sheets */
+/* Quem abriu a folha (seletor, porque a lista pode ser redesenhada): recebe o foco de volta ao fechar. */
+let sheetOpener = null;
+const FOCUS_KEYS = ["data-open", "data-act", "data-tab", "data-resetpw", "id"];
+function focusKey(el) {
+  const a = el && el !== document.body && FOCUS_KEYS.find((k) => el.hasAttribute(k));
+  return a ? `[${a}="${CSS.escape(el.getAttribute(a))}"]` : null;
+}
+function restoreFocus() {
+  const el = sheetOpener && $(sheetOpener);
+  if (el) el.focus({ preventScroll: true });
+}
+
 function openSheet(html) {
-  sheetRoot.innerHTML = `<div class="overlay" data-close><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+  if (!sheetRoot.firstChild) sheetOpener = focusKey(document.activeElement);
+  sheetRoot.innerHTML = `<div class="overlay" data-close><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">${html}</div></div>`;
+  sheetRoot.querySelector(".sheet header h3").id = "sheet-title";
   const first = sheetRoot.querySelector("input:not([type=hidden]), button.btn");
-  if (first && hasMouse()) first.focus();
+  // Sem mouse, o foco vai para a folha e não para um campo: assim o teclado do celular não abre sozinho.
+  (first && hasMouse() ? first : sheetRoot.querySelector(".sheet")).focus();
 }
 function closeSheet() {
+  if (!sheetRoot.firstChild) return;
   sheetRoot.innerHTML = "";
   // Na aba Escanear, o leitor USB "digita" no campo: devolve o foco para a próxima leitura.
   const code = $("#code");
-  if (code && hasMouse()) code.focus();
+  if (code && hasMouse()) code.focus(); else restoreFocus();
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+/* Tab e Shift+Tab circulam só dentro da folha aberta. */
+function trapFocus(e) {
+  const sheet = $(".sheet");
+  if (!sheet) return;
+  const items = [...sheet.querySelectorAll("button, [href], input, select, textarea, summary")]
+    .filter((el) => !el.disabled && el.getClientRects().length && !el.closest("details:not([open]) > :not(summary)"));
+  const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+  if (!sheet.contains(cur) || cur === sheet) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSheet();
+  if (e.key === "Tab") trapFocus(e);
+});
 
 function catOptions(sel) {
   return `<option value="">Sem categoria</option>` + S.cats.map((c) => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
@@ -440,6 +470,7 @@ function openUserForm(reset) {
 /* ---------------------------------------------------------------- events */
 let searchTimer;
 document.addEventListener("click", async (e) => {
+  if (!e.target.closest("#sheet-root")) sheetOpener = null; // clicou em outra coisa: não volta mais o foco
   const t = e.target.closest("[data-tab],[data-open],[data-cat],[data-act],[data-close],[data-delcat],[data-resetpw],[data-toggleuser]");
   if (!t) return;
   if (t.hasAttribute("data-close")) { if (t.classList.contains("overlay") && e.target !== t) return; closeSheet(); return; }
@@ -481,7 +512,8 @@ document.addEventListener("input", (e) => {
   searchTimer = setTimeout(async () => {
     S.q = e.target.value.trim(); const pos = e.target.selectionStart;
     if (!(await reloadProducts())) return;
-    const q = $("#q"); if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+    const q = $("#q"); // com uma folha aberta (abriu uma peça antes da busca terminar), o foco fica nela
+    if (q && !sheetRoot.firstChild) { q.focus(); q.setSelectionRange(pos, pos); }
   }, 250);
 });
 
@@ -489,6 +521,8 @@ document.addEventListener("input", (e) => {
 function render() {
   if (!S.user) return authView();
   ({ stock: stockView, alerts: alertsView, scan: scanView, history: historyView, more: moreView }[S.tab] || stockView)();
+  // A folha fechou e a tela foi redesenhada (ex.: depois de uma saída): o foco volta ao mesmo item.
+  if (!sheetRoot.firstChild) { restoreFocus(); sheetOpener = null; }
 }
 async function boot() {
   try {

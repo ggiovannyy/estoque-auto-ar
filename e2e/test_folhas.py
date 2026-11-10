@@ -75,3 +75,35 @@ def test_erro_ao_salvar_a_edicao_aparece_junto_do_formulario(page, api):
     error = page.locator("#editform .err")
     expect(error).to_contain_text("código de barras")
     expect(error).to_be_in_viewport()
+
+
+# ---------------------------------------------------------------- foco do teclado (FE-07)
+def test_folha_tem_nome_e_prende_o_foco_do_teclado(page, api):
+    p = api.product()
+    page.goto("/")
+    open_product(page, p)
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_have_accessible_name(p["name"])
+
+    def cycle():
+        for i, key in enumerate(["Tab"] * 25 + ["Shift+Tab"] * 25):
+            page.keyboard.press(key)
+            where = page.evaluate("() => document.activeElement.outerHTML.slice(0, 60)")
+            assert dialog.evaluate("(d) => d.contains(document.activeElement)"), f"o foco saiu da folha ({i}, {key}): {where}"
+    cycle()
+    page.get_by_text("Editar dados da peça").click()  # com a edição aberta, os campos dela entram na volta
+    cycle()
+
+
+def test_fechar_a_folha_devolve_o_foco_a_peca_que_a_abriu(page, api):
+    p = api.product(qty=5)
+    page.goto("/")
+    open_product(page, p)
+    page.keyboard.press("Escape")
+    expect(page.locator(f'[data-open="{p["id"]}"]')).to_be_focused()
+
+    # Depois de registrar uma saída a lista é redesenhada: o foco volta à mesma peça.
+    page.locator(f'[data-open="{p["id"]}"]').click()
+    page.locator("#mgo").click()
+    expect(page.locator("#toast")).to_contain_text("agora 4 em estoque")
+    expect(page.locator(f'[data-open="{p["id"]}"]')).to_be_focused()
