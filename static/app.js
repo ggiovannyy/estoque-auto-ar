@@ -40,6 +40,16 @@ async function api(path, opts = {}) {
 /* Sem tela de toque: dá para pôr o foco num campo sem abrir o teclado do celular. */
 const hasMouse = () => !matchMedia("(pointer: coarse)").matches;
 const formBody = (f) => Object.fromEntries(new FormData(f));
+/* Liga o envio do formulário travando os botões até a resposta: duplo clique ou Enter repetido não envia duas vezes. */
+function onSubmit(form, send) {
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (form.dataset.busy) return;
+    const buttons = form.querySelectorAll("button:not([type=button])");
+    form.dataset.busy = "1"; buttons.forEach((b) => (b.disabled = true));
+    try { await send(form); } finally { delete form.dataset.busy; buttons.forEach((b) => (b.disabled = false)); }
+  };
+}
 /* Mensagem de erro dentro de um formulário (login, folhas). */
 const showError = (sel, e) => { $(sel).innerHTML = `<div class="err">${esc(e.message)}</div>`; };
 const fmtDate = (s) => {
@@ -107,11 +117,10 @@ function authView() {
       <label class="f"><span>Senha</span><input name="password" type="password" required ${setup ? 'minlength="8" placeholder="Mínimo de 8 caracteres"' : ""} autocomplete="${setup ? "new-password" : "current-password"}"></label>
       <button class="btn block">${setup ? "Criar e entrar" : "Entrar"}</button>
     </form></div>`;
-  $("#auth").onsubmit = async (e) => {
-    e.preventDefault();
-    try { await api(setup ? "/setup" : "/login", { method: "POST", body: formBody(e.target) }); await boot(); }
+  onSubmit($("#auth"), async (f) => {
+    try { await api(setup ? "/setup" : "/login", { method: "POST", body: formBody(f) }); await boot(); }
     catch (er) { showError("#autherr", er); }
-  };
+  });
 }
 
 function setupElsewhereView() {
@@ -214,22 +223,19 @@ function moreView() {
       <button class="btn sm ghost" data-act="pw">Trocar senha</button></div>
       <button class="btn dark block" data-act="logout" style="margin-top:8px">Sair</button></div>`);
   if (owner) { renderCats(); renderUsers(); renderBackup(); }
-  const cf = $("#catform");
-  cf.onsubmit = async (e) => {
-    e.preventDefault();
+  onSubmit($("#catform"), async (f) => {
     try {
-      await api("/categories", { method: "POST", body: { name: new FormData(cf).get("name") } });
+      await api("/categories", { method: "POST", body: { name: new FormData(f).get("name") } });
       toast("Categoria criada."); await refresh();
     } catch (er) { toast(er.message, true); }
-  };
+  });
   const mf = $("#minform");
-  if (mf) mf.onsubmit = async (e) => {
-    e.preventDefault();
+  if (mf) onSubmit(mf, async (f) => {
     try {
-      const r = await api("/settings", { method: "PUT", body: { min_default: new FormData(mf).get("min") } });
+      const r = await api("/settings", { method: "PUT", body: { min_default: new FormData(f).get("min") } });
       S.minDefault = r.min_default; toast("Mínimo atualizado."); await refresh();
     } catch (er) { toast(er.message, true); }
-  };
+  });
 }
 function renderCats() {
   $("#catbox").innerHTML = S.cats.map((c) => `<div class="setting"><div class="l">${esc(c.name)}<small>${c.products} peça(s)</small></div>
@@ -335,14 +341,13 @@ function openForm(prefill = {}) {
     <form id="newform"><div id="ferr"></div>${productFields(prefill)}
     <label class="f"><span>Quantidade em estoque agora</span><input name="qty" type="number" min="0" value="1"></label>
     <button class="btn block">Cadastrar peça</button></form>`);
-  $("#newform").onsubmit = async (e) => {
-    e.preventDefault();
+  onSubmit($("#newform"), async (f) => {
     try {
-      const p = await api("/products", { method: "POST", body: formBody(e.target) });
+      const p = await api("/products", { method: "POST", body: formBody(f) });
       closeSheet(); toast(`${p.name} cadastrada (${p.qty} un.).`);
       S.tab = S.tab === "scan" ? "scan" : "stock"; await refresh();
     } catch (er) { showError("#ferr", er); }
-  };
+  });
 }
 
 async function openProduct(id) {
@@ -379,20 +384,20 @@ async function openProduct(id) {
       closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh();
     } catch (e) { showError("#merr", e); go.disabled = false; }
   };
-  $("#editform").onsubmit = async (e) => {
-    e.preventDefault();
+  onSubmit($("#editform"), async (f) => {
     try {
-      await api("/products/" + id, { method: "PUT", body: formBody(e.target) });
+      await api("/products/" + id, { method: "PUT", body: formBody(f) });
       closeSheet(); toast("Dados salvos."); await refresh();
     } catch (er) { showError("#merr", er); }
-  };
+  });
   const del = $("#del");
   if (del) del.onclick = async () => {
     if (!confirm(`Excluir "${p.name}"? O histórico será mantido.`)) return;
+    del.disabled = true;
     try {
       await api("/products/" + id, { method: "DELETE" });
       closeSheet(); toast("Peça excluída."); await refresh();
-    } catch (e) { toast(e.message, true); }
+    } catch (e) { toast(e.message, true); del.disabled = false; }
   };
 }
 
@@ -402,13 +407,12 @@ function openPw() {
     <label class="f"><span>Senha atual</span><input name="current" type="password" required autocomplete="current-password"></label>
     <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="8" autocomplete="new-password"></label>
     <button class="btn block">Salvar</button></form>`);
-  $("#pwform").onsubmit = async (e) => {
-    e.preventDefault();
+  onSubmit($("#pwform"), async (f) => {
     try {
-      await api("/password", { method: "POST", body: formBody(e.target) });
+      await api("/password", { method: "POST", body: formBody(f) });
       closeSheet(); toast("Senha alterada.");
     } catch (er) { showError("#perr", er); }
-  };
+  });
 }
 function openUserForm(reset) {
   openSheet(`<header><h3>${reset ? "Nova senha" : "Novo usuário"}</h3><button class="x" data-close aria-label="Fechar">×</button></header>
@@ -418,15 +422,14 @@ function openUserForm(reset) {
     <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     ${reset ? "" : `<label class="f"><span>Perfil</span><select name="role"><option value="atendente">Atendente</option><option value="dono">Dono (acesso total)</option></select></label>`}
     <button class="btn block">Salvar</button></form>`);
-  $("#uform").onsubmit = async (e) => {
-    e.preventDefault();
+  onSubmit($("#uform"), async (f) => {
     try {
-      const body = formBody(e.target);
+      const body = formBody(f);
       if (reset) await api("/users/" + reset, { method: "PUT", body });
       else await api("/users", { method: "POST", body });
       closeSheet(); toast("Salvo."); renderUsers();
     } catch (er) { showError("#uerr", er); }
-  };
+  });
 }
 
 /* ---------------------------------------------------------------- events */
