@@ -384,6 +384,11 @@ def product_detail(pid):
     return jsonify(d)
 
 
+def integrity_error(e, duplicate_msg):
+    """Mensagem para o IntegrityError de cadastro/edição de peça: categoria que não existe ou código repetido."""
+    return err("Categoria não encontrada." if "FOREIGN KEY" in str(e) else duplicate_msg)
+
+
 def read_product_fields(d):
     name = text(d, "name")
     if not name:
@@ -451,9 +456,9 @@ def create_product():
         if initial:
             record_move(pid, "in", initial, "Estoque inicial", g.user["id"])
         db().commit()
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
         db().rollback()
-        return err("Já existe uma peça com esse código de barras.")
+        return integrity_error(e, "Já existe uma peça com esse código de barras.")
     return jsonify(product_dict(fetch_product(pid=pid))), 201
 
 
@@ -467,8 +472,9 @@ def update_product(pid):
         db().execute("""UPDATE products SET barcode=:barcode, code=:code, name=:name, category_id=:category_id,
                         ncm=:ncm, brand=:brand, min_qty=:min_qty WHERE id=:id AND active=1""", {**f, "id": pid})
         db().commit()
-    except sqlite3.IntegrityError:
-        return err("Já existe outra peça com esse código de barras.")
+    except sqlite3.IntegrityError as e:
+        db().rollback()
+        return integrity_error(e, "Já existe outra peça com esse código de barras.")
     r = fetch_product(pid=pid)
     return jsonify(product_dict(r)) if r else err("Peça não encontrada.", 404)
 
