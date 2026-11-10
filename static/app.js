@@ -241,7 +241,12 @@ function openSheet(html) {
   const first = sheetRoot.querySelector("input:not([type=hidden]), button.btn");
   if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
 }
-function closeSheet() { sheetRoot.innerHTML = ""; }
+function closeSheet() {
+  sheetRoot.innerHTML = "";
+  // Na aba Escanear, o leitor USB "digita" no campo: devolve o foco para a próxima leitura.
+  const code = $("#code");
+  if (code && !matchMedia("(pointer: coarse)").matches) code.focus();
+}
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
 function catOptions(sel) {
