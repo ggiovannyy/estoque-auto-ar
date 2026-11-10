@@ -30,6 +30,8 @@ arquitetura, decisões, histórico e a lista de pendências.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
   Mudança de interface ganha teste em `e2e/`.
+- **CI:** `.github/workflows/testes.yml` roda pyflakes e `pytest -q` (Windows e Linux, Python 3.13 e 3.14),
+  `pytest -q e2e` e a checagem de CRLF dos `.bat` em todo PR; o resultado aparece no próprio PR.
 - **Windows:** `iniciar.bat`, `instalar-inicio-automatico.bat` e `remover-inicio-automatico.bat`. Os `.bat` precisam
   ficar com **CRLF** (ver `.gitattributes`).
 

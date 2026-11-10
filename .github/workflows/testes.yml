@@ -1,0 +1,64 @@
+# Roda os testes a cada PR e a cada push na main.
+# As actions ficam presas ao commit da versão (comentário ao lado), como as dependências do requirements.txt.
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]   # a oficina roda Windows
+        python: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
+      - run: python -m pytest -q
+
+  interface:
+    name: Interface (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest -q e2e --basetemp=e2e-tmp
+      - name: Guarda o log do servidor se falhar
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: log-do-servidor
+          path: e2e-tmp/**/servidor.log
+
+  bat-crlf:
+    name: .bat com CRLF
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Confere o fim de linha dos .bat
+        # Com LF o cmd do Windows interpreta errado os .bat; já aconteceu uma vez (ver .gitattributes).
+        run: python .github/scripts/confere_crlf.py *.bat
