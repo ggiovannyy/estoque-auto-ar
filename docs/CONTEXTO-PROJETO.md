@@ -362,6 +362,11 @@ a97e956 Sistema de estoque Maxx Auto Ar
    14, PR #17). A tela passa a usar `request_id` e `expected` nos PRs da sessão de frontend. Fase 3: validação dos
    dados recebidos, mensagem de categoria, enumeração de usuários, limites de tamanho, log em arquivo, refatorações
    e `pip-audit` no CI (BE-10, 11, 15, 16, 17 e 18, PR #19).
+8. Auditoria do frontend (10/11/2026), com os achados FE-01 a FE-21 (seção 8.7), em PRs empilhados sobre o #19:
+   logo e cores da oficina (PR #15); envio único, rótulo da Contagem, erro visível, foco e reenvio seguro (PR #18);
+   ganhos rápidos, contraste, aviso de conexão, lista em colunas e leitura em sequência com a rota de lote (PR #20);
+   toque, texto e semântica (PR #21); busca sem recriar a tela, câmera sob demanda, CSP rígida, fontes locais e
+   ícones (PR #22).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -441,8 +446,8 @@ para o porte.
 | BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #16) |
 | BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #16) |
 | BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #16) |
-| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Corrigido na API (PR #17); falta a tela mandar `request_id` |
-| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Corrigido na API (PR #17); falta a tela mandar `expected` |
+| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Corrigido na API (PR #17) e na tela (PR #18) |
+| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Corrigido na API (PR #17) e na tela (PR #18) |
 | BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Aviso no início (PR #17) |
 | BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Corrigido (PR #17) |
 | BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Corrigido (PR #17) |
@@ -454,6 +459,42 @@ para o porte.
 | BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Corrigido (PR #19) |
 | BE-17 | Baixa | Erros só no console; 500 em HTML | Corrigido (PR #19) |
 | BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Corrigido (PR #19): `read_new_user` e `inputs.py` |
+
+
+### 8.7 Auditoria do frontend (10/11/2026)
+
+Telas, usabilidade, acessibilidade (WCAG 2.2 AA), desempenho e código da interface. Respostas do desenvolvedor: a
+operação mais comum é a **Saída** (continua o padrão); o uso maior é **no computador** com o leitor USB; a oficina
+**sempre tem internet**; o cliente tem **logo** (recebida em PNG; falta versão vetorial e ícone quadrado); aprovou a
+**leitura em sequência**.
+
+| ID | Sev. | Achado | Situação |
+|---|---|---|---|
+| FE-01 | Alta | Duplo clique em "Cadastrar peça" criava duas peças | Corrigido (PR #18) |
+| FE-02 | Alta | Na Contagem, o rótulo da quantidade ia para o campo de observação | Corrigido (PR #18) |
+| FE-04 | Média | Erro da edição aparecia fora da área visível | Corrigido (PR #18) |
+| FE-07 | Alta (uso no computador) | Tab saía da folha; foco ia para o `<body>` ao fechar | Corrigido (PR #18) |
+| FE-03 | Média | Aba Mais rolava para os lados no celular (caminho do backup) | Corrigido (PR #20) |
+| FE-05 | Baixa | Botão da folha sempre azul: Entrada podia sair como Saída | Corrigido (PR #20): cor do tipo e "5 → 4" |
+| FE-06 | Média | Botão flutuante cobria a quantidade das peças | Corrigido (PR #20): ao lado da busca |
+| FE-08 | Média | Contraste abaixo do AA (botão 3,2:1, texto auxiliar, borda dos campos) | Corrigido (PRs #15 e #20) |
+| FE-09 | Média | Sem conexão: só aviso de 2,6 s e dado velho na tela | Corrigido (PR #20): faixa fixa e carregando |
+| FE-20 | Média | Tela larga do computador mal aproveitada | Corrigido (PR #20): colunas a partir de 1200 px |
+| FE-11 | Baixa | Áreas de toque de 32 a 40 px; texto de 11 a 12,8 px | Corrigido (PR #21): `--tap` e `--fs-xs` |
+| FE-12 | Baixa | Setas do navegador junto do contador − / + | Corrigido (PR #21) |
+| FE-13 | Baixa | Código de barras abria teclado só de números | Corrigido (PR #21) |
+| FE-17 | Baixa | Sem `<h1>`, campo sem rótulo, `aria-live` na página inteira | Corrigido (PR #21) |
+| FE-18 | Baixa | Linha dupla no topo do Histórico | Corrigido (PR #21) |
+| FE-19 | Baixa | "Sair" sem conexão não avisava (erro de JavaScript) | Corrigido (PR #21) |
+| FE-10 | Média | Busca recriava a tela e o campo (teclado do iPhone) | Corrigido (PR #22) |
+| FE-15 | Baixa | Biblioteca da câmera (375 KB) baixada em toda abertura | Corrigido (PR #22) |
+| FE-16 | Baixa | `style="..."` obrigava `'unsafe-inline'` na CSP | Corrigido (PR #22) |
+| FE-14 | Baixa | Fontes do Google Fonts | Corrigido (PR #22): `static/fonts` |
+| FE-21 | Baixa | Sem ícone PNG para a tela de início | Corrigido (PR #22), ainda com o ícone provisório |
+
+Falta: testar em iPhone e Android reais (teclado, câmera lendo etiqueta, "Adicionar à Tela de Início") e trocar o
+ícone provisório quando o cliente mandar um ícone quadrado. A escala de espaçamentos em tokens ficou de fora de
+propósito (não muda nada para quem usa).
 
 ---
 
