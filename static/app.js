@@ -146,7 +146,7 @@ function stockView() {
     <div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
     <div class="chips">${chips}</div>${list}
     ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}
-    <button class="btn fab" data-act="new">+ Nova peça</button>`);
+    <div class="fab-gap"></div><button class="btn fab" data-act="new">+ Nova peça</button>`);
 }
 
 function alertsView() {

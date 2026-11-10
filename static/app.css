@@ -112,6 +112,7 @@ button.stat.warn b { color: #8a5a00; }
 .empty { text-align: center; color: var(--muted); padding: 36px 12px; }
 .fab { position: fixed; right: 16px; bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); z-index: 4; border-radius: 999px; box-shadow: 0 6px 18px rgb(11 43 60 / .3); }
 @media (min-width: 900px) { .fab { bottom: 28px; right: 36px; } }
+.fab-gap { height: 64px; } /* o fim da lista rola para cima do botão flutuante em vez de ficar embaixo dele */
 .more { margin-top: 14px; }
 
 /* ---------- scan ---------- */
