@@ -103,7 +103,8 @@ exato do sistema de notas.
 
 | Arquivo | Linhas | Papel |
 |---|---|---|
-| `app.py` | ~586 | Aplicação Flask: esquema do banco, rotas `/api/*`, autenticação e permissões |
+| `app.py` | ~546 | Aplicação Flask: rotas `/api/*`, autenticação e permissões |
+| `migrations.py` | ~95 | Esquema do banco em passos numerados (`MIGRATIONS`), `migrate`, `schema_version`, `SchemaTooNewError` |
 | `security.py` | ~88 | Regras sem dependência do Flask: senha mínima, `LoginThrottle`, `csv_safe`, cabeçalhos de segurança/CSP |
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
 | `run.py` | ~88 | Ponto de entrada: gera certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
@@ -116,7 +117,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0` |
-| `tests/` | ~570 | 69 testes pytest |
+| `tests/` | ~710 | 76 testes pytest |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -136,7 +137,16 @@ settings   (key, value)                             -- min_default = '2'
   refrigerante, Óleo, Sensor, Correia, Outros.
 - **Alerta:** `qty <= COALESCE(min_qty, min_default)`.
 - **Exclusão de peça é lógica:** `active=0` e `barcode=NULL`, o que libera o código de barras e preserva o histórico.
-- **Não há mecanismo de migração:** só `CREATE TABLE IF NOT EXISTS`. Isso está nas pendências (seção 8).
+- **Migrações (`migrations.py`):**
+  - A versão do banco fica em `PRAGMA user_version`. Ao abrir, o `init_db` aplica em ordem só os passos pendentes
+    de `MIGRATIONS`.
+  - Cada passo roda em uma transação junto com a troca de versão: se falhar, o banco fica como estava.
+  - O passo 1 é o esquema original, com `IF NOT EXISTS`. Bancos criados antes das migrações (versão 0) sobem para a 1
+    sem perder dados.
+  - Um banco de versão mais nova que o sistema é recusado (`SchemaTooNewError`), para uma versão antiga não estragá-lo.
+  - **Para mudar o esquema:** acrescentar um passo no fim da lista, com teste de banco antigo subindo de versão.
+    Nunca alterar um passo que já foi para a oficina.
+  - As categorias iniciais só são criadas no passo 1. Se o dono excluir todas, elas não voltam ao reiniciar.
 - **Formato de data:** texto `YYYY-MM-DD HH:MM:SS`, hora local.
 
 ### 3.4 API (todas JSON; exigem login, exceto `state`, `setup` e `login`)
@@ -297,11 +307,10 @@ a97e956 Sistema de estoque Maxx Auto Ar
 
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
-Os itens 1 a 8 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2). Faltam:
+Os itens 1 a 9 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5). Faltam:
 
 | # | Item | Sugestão |
 |---|---|---|
-| 9 | **Sem migração de banco** | `PRAGMA user_version` + migrações numeradas, **antes** da primeira atualização com dados reais |
 | 10 | `movements.qty` tem dois significados (em `adjust` é a nova contagem) | `delta` + `balance` bastam; simplificar |
 | 11 | Quantidade inicial inválida/negativa vira 0 em silêncio (`create_product`) | Retornar 400 |
 | 12 | `handleCode` decide "peça nova" comparando o texto `"não cadastrada"` | `api()` expor o status HTTP e checar 404 |
@@ -350,8 +359,8 @@ Os itens 1 a 8 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2). Faltam:
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 69 testes, ~10 s
-python -m pyflakes app.py run.py backup.py security.py tests/
+pytest -q            # 76 testes, ~15 s
+python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -377,7 +386,7 @@ python -m pyflakes app.py run.py backup.py security.py tests/
 - **Verificar de verdade:** além do pytest, subir o servidor real (com `MAXX_DATA` temporário) e testar no navegador
   quando a mudança é de interface.
 - **Relatar com honestidade:** o que foi testado e o que **não** foi (ex.: `.bat` sem Windows, câmera sem celular real).
-- **Clean code:** módulos com responsabilidade única (`security.py`, `backup.py`), nada de código morto, nomes claros,
+- **Clean code:** módulos com responsabilidade única (`security.py`, `backup.py`, `migrations.py`), nada de código morto, nomes claros,
   comentários só para o porquê não óbvio. O `app.py` não deve crescer sem necessidade: extrair módulos quando fizer
   sentido.
 - **Skills do projeto** (`.claude/`):
