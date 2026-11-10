@@ -137,7 +137,7 @@ exato do sistema de notas.
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
 | `tests/` | ~1660 | 177 testes pytest da API |
-| `e2e/` | ~950 | 50 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `e2e/` | ~1010 | 61 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -225,6 +225,9 @@ settings   (key, value)                             -- min_default = '2'
   duplo. A folha prende o Tab, tem nome para o leitor de tela e, ao fechar, devolve o foco a quem a abriu. A
   movimentação manda `request_id` (reenvio depois de "Sem conexão" não grava duas vezes) e, na Contagem,
   `expected` (409 se o saldo mudou enquanto se contava; a folha mostra o saldo novo).
+- **Padrões** (`e2e/test_padroes.py`, `e2e/test_acessibilidade.py`): controles com pelo menos 44 x 44 px (`--tap`) e
+  texto com pelo menos 13 px (`--fs-xs`); contraste AA medido em todo texto visível de cada tela (texto auxiliar
+  `--muted` #506b79, borda dos campos `--field` #7a909c). A logo do cabeçalho é o `<h1>` e cada aba tem um `<h2>`.
 - **Design:** segue a logo do cliente (`static/logo.png`; `static/logo-sem-slogan.png` no cabeçalho do celular).
   - Cores: ação no azul da logo `#0062b1` (6,2:1 com texto branco), vermelho da logo `#e8333a` só como faixa
     decorativa (4,2:1, não serve para texto), saída/zerado em vermelho `#c62828`, alerta âmbar `#f5a000`, texto
@@ -473,7 +476,7 @@ para o porte.
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
 pytest -q            # 177 testes da API, ~50 s
-pytest -q e2e        # 50 testes de interface, ~75 s
+pytest -q e2e        # 61 testes de interface, ~85 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
