@@ -1,0 +1,24 @@
+"""Layout: nada vaza para os lados no celular e cada tamanho de tela usa bem o espaço."""
+import json
+
+import pytest
+from playwright.sync_api import expect
+
+# No celular emulado o navegador alarga a área de layout até caber o conteúdo (innerWidth cresce junto):
+# compara com a largura da tela.
+WIDTH = "() => document.documentElement.scrollWidth"
+
+
+@pytest.mark.parametrize("tab", ["stock", "alerts", "scan", "history", "more"])
+def test_nenhuma_aba_rola_para_os_lados_no_celular(phone, tab):
+    phone.set_viewport_size({"width": 360, "height": 740})
+    # Pasta de backup como a da oficina: caminho longo, com trechos sem espaço para quebrar a linha.
+    long_dir = r"C:\Users\atendimento\OneDrive\Backup_Estoque_Maxx_Auto_Ar_Campo_Mourao_copias_diarias_do_sistema"
+    phone.route("**/api/backup", lambda r: r.fulfill(content_type="application/json",
+                                                     body=json.dumps({"last_at": None, "dir": long_dir})))
+    phone.goto("/")
+    phone.locator(f'nav.tabs [data-tab="{tab}"]').click()
+    if tab == "more":
+        expect(phone.locator("#backupbox small")).to_be_visible()  # o caminho da pasta (longo, sem espaços)
+    width = phone.evaluate(WIDTH)
+    assert width <= 360, f"a aba {tab} rola para os lados ({width} px numa tela de 360)"

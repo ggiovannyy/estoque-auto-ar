@@ -166,7 +166,7 @@ details.edit[open] summary { margin-bottom: 10px; }
 
 .setting { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .setting:first-child { border-top: 0; }
-.setting .l { min-width: 0; }
+.setting .l { min-width: 0; overflow-wrap: anywhere; } /* caminho da pasta de backup quebra a linha em vez de vazar */
 .setting small { color: var(--muted); display: block; }
 .section { margin-bottom: 18px; }
 .section > h3 { font-size: 1.15rem; margin-bottom: 8px; }
