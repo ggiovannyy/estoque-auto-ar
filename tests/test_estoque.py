@@ -96,3 +96,37 @@ def test_peca_excluida_libera_o_codigo_de_barras(owner):
     p = new_product(owner, barcode="7891234567895")
     assert owner.delete(f"/api/products/{p['id']}").status_code == 200
     new_product(owner, barcode="7891234567895")
+
+
+# ---------------------------------------------------------------- UPC-A (12 dígitos) x EAN-13 (13 dígitos)
+# A câmera pode ler o código de uma peça como UPC-A e o leitor USB como EAN-13 (o mesmo número com
+# um 0 na frente). O sistema grava e busca sempre com 13 dígitos para os dois acharem a mesma peça.
+UPC_A = "036000291452"
+EAN_13 = "0" + UPC_A
+
+
+def test_codigo_upc_a_e_gravado_com_13_digitos(owner):
+    assert new_product(owner, barcode=UPC_A)["barcode"] == EAN_13
+
+
+def test_busca_acha_a_peca_pelo_upc_a_ou_pelo_ean_13(owner):
+    pela_camera = new_product(owner, name="Cadastrada pela câmera", barcode=UPC_A)
+    assert owner.get(f"/api/products/barcode/{EAN_13}").get_json()["id"] == pela_camera["id"]
+    assert owner.get(f"/api/products/barcode/{UPC_A}").get_json()["id"] == pela_camera["id"]
+
+
+def test_upc_a_e_ean_13_do_mesmo_codigo_sao_a_mesma_peca(owner):
+    new_product(owner, barcode=EAN_13)
+    r = owner.post("/api/products", json={"name": "Duplicada", "barcode": UPC_A})
+    assert r.status_code == 400
+
+
+def test_edicao_tambem_grava_com_13_digitos(owner):
+    p = new_product(owner)
+    r = owner.put(f"/api/products/{p['id']}", json={"name": p["name"], "barcode": f" {UPC_A} "})
+    assert r.get_json()["barcode"] == EAN_13
+
+
+def test_outros_codigos_ficam_como_foram_lidos(owner):
+    for code in ("7891234567895", "12345670", "ABC-12345678", "1234567890123456", "03600029145a"):
+        assert new_product(owner, name=code, barcode=code)["barcode"] == code

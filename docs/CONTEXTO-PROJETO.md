@@ -117,7 +117,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0` |
-| `tests/` | ~710 | 76 testes pytest |
+| `tests/` | ~770 | 83 testes pytest |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -137,12 +137,18 @@ settings   (key, value)                             -- min_default = '2'
   refrigerante, Óleo, Sensor, Correia, Outros.
 - **Alerta:** `qty <= COALESCE(min_qty, min_default)`.
 - **Exclusão de peça é lógica:** `active=0` e `barcode=NULL`, o que libera o código de barras e preserva o histórico.
+- **Código de barras com 12 dígitos (UPC-A) vira 13 (EAN-13)** com um `0` na frente, ao gravar e ao buscar
+  (`normalize_barcode` no `app.py`). A câmera pode ler UPC-A e o leitor USB, EAN-13; assim os dois acham a mesma peça.
+  Outros códigos ficam como foram lidos.
 - **Migrações (`migrations.py`):**
   - A versão do banco fica em `PRAGMA user_version`. Ao abrir, o `init_db` aplica em ordem só os passos pendentes
     de `MIGRATIONS`.
   - Cada passo roda em uma transação junto com a troca de versão: se falhar, o banco fica como estava.
   - O passo 1 é o esquema original, com `IF NOT EXISTS`. Bancos criados antes das migrações (versão 0) sobem para a 1
     sem perder dados.
+  - O passo 2 converte os códigos UPC-A já gravados para EAN-13. A regra fica escrita no próprio passo, não importada
+    do `app.py`. Se um UPC-A e o EAN-13 equivalente já forem peças diferentes, a migração para com uma mensagem
+    nomeando as duas e o sistema não abre até alguém resolver.
   - Um banco de versão mais nova que o sistema é recusado (`SchemaTooNewError`), para uma versão antiga não estragá-lo.
   - **Para mudar o esquema:** acrescentar um passo no fim da lista, com teste de banco antigo subindo de versão.
     Nunca alterar um passo que já foi para a oficina.
@@ -277,13 +283,15 @@ a97e956 Sistema de estoque Maxx Auto Ar
    correção e verificação por mutação.
 4. "Itens rápidos" no PR #2 (backup, início automático, primeiro acesso local, cabeçalhos, versões fixas, CRLF).
 5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
-   (PR #3), `iniciar.bat` usando o `py` (PR #4) e migrações do banco (PR #5).
+   (PR #3), `iniciar.bat` usando o `py` (PR #4), migrações do banco (PR #5) e códigos UPC-A gravados como EAN-13
+   (PR #6, item 15 da revisão).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
-[#3](https://github.com/ggiovannyy/estoque-auto-ar/pull/3) e
-[#4](https://github.com/ggiovannyy/estoque-auto-ar/pull/4), juntados à `main`;
-[#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5), migrações.
+[#3](https://github.com/ggiovannyy/estoque-auto-ar/pull/3),
+[#4](https://github.com/ggiovannyy/estoque-auto-ar/pull/4) e
+[#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5), juntados à `main`;
+[#6](https://github.com/ggiovannyy/estoque-auto-ar/pull/6), UPC-A × EAN-13.
 
 ---
 
@@ -304,7 +312,7 @@ a97e956 Sistema de estoque Maxx Auto Ar
 - [ ] **Testar a câmera em celular real** (Android e iPhone). Confirmar o fluxo do certificado autoassinado,
   principalmente no iPhone/Safari.
 - [ ] **Testar o leitor USB real.** Confirmar que envia Enter. Ver também a divergência UPC-A (12 dígitos) × EAN-13
-  (13 dígitos) entre câmera e leitor (item 15 abaixo).
+  (13 dígitos) entre câmera e leitor, já tratada no PR #6. Falta confirmar com o leitor e a câmera reais.
 - [ ] **Configurar o OneDrive ou o Google Drive** no computador da oficina e confirmar o backup indo para a nuvem.
 - [ ] **Reservar IP fixo** (reserva DHCP) para o computador da oficina no roteador.
 - [ ] **Demonstrar ao cliente e validar.**
@@ -313,7 +321,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
-Os itens 1 a 9 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5). Faltam:
+Os itens 1 a 9 e o 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5; 15,
+UPC-A × EAN-13, no PR #6). Faltam:
 
 | # | Item | Sugestão |
 |---|---|---|
@@ -322,7 +331,6 @@ Os itens 1 a 9 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra�
 | 12 | `handleCode` decide "peça nova" comparando o texto `"não cadastrada"` | `api()` expor o status HTTP e checar 404 |
 | 13 | Ao fechar a folha (X/Esc) na aba Escanear, o foco não volta ao campo do leitor | Refocar `#code` em `closeSheet` |
 | 14 | Busca recarrega 3 endpoints a cada tecla; `/api/products` sem paginação | Recarregar só produtos; paginar se passar de alguns milhares |
-| 15 | UPC-A × EAN-13 podem não casar entre câmera e leitor | Normalizar para 13 dígitos ao gravar e buscar |
 | Nit | `S.loaded` nunca lido; `tabs` + `order` redundantes; `formBody` sem ganho; HTML da linha de histórico duplicado; linhas muito longas no `app.js` | Limpeza |
 | — | A correção da aba Alertas foi verificada com Playwright, mas **não há teste de frontend no repositório** | Adicionar testes e2e (há a skill `playwright-cli`) |
 | — | Sem CI | GitHub Actions rodando `pytest` |
@@ -365,7 +373,7 @@ Os itens 1 a 9 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra�
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 76 testes, ~15 s
+pytest -q            # 83 testes, ~16 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ```
 
@@ -406,7 +414,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 76 passed).
+2. Rodar `pytest -q` (esperado: 83 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.

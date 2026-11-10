@@ -35,7 +35,7 @@ arquitetura, decisões, histórico e a lista de pendências.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q                                   # 76 testes
+pytest -q                                   # 83 testes
 python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)

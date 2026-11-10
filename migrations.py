@@ -58,8 +58,30 @@ def _v1_initial_schema(conn):
     conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('min_default', '2')")
 
 
+def _is_upc_a(column):
+    return f"length({column}) = 12 AND {column} NOT GLOB '*[^0-9]*'"
+
+
+def _v2_upc_a_to_ean_13(conn):
+    """Grava os códigos UPC-A (12 dígitos) como EAN-13, com um 0 na frente, que é como o leitor
+    USB costuma mandar. A regra fica escrita aqui, e não importada do app, para este passo nunca
+    mudar depois de rodar na oficina."""
+    clashes = conn.execute(f"""
+        SELECT upc.name, ean.name, ean.barcode FROM products upc
+        JOIN products ean ON ean.barcode = '0' || upc.barcode
+        WHERE {_is_upc_a('upc.barcode')}""").fetchall()
+    if clashes:
+        pairs = "; ".join(f"'{a}' e '{b}' (código {code})" for a, b, code in clashes)
+        raise RuntimeError(
+            "Estas peças têm o mesmo código de barras, uma com 12 e outra com 13 dígitos: "
+            f"{pairs}. Na versão anterior do sistema, exclua uma delas e passe o estoque para a outra; "
+            "depois atualize de novo.")
+    conn.execute(f"UPDATE products SET barcode = '0' || barcode WHERE {_is_upc_a('barcode')}")
+
+
 MIGRATIONS = [
     _v1_initial_schema,
+    _v2_upc_a_to_ean_13,
 ]
 
 
