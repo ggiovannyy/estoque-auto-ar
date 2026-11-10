@@ -559,14 +559,22 @@ def add_user():
 @login_required(owner=True)
 def edit_user(uid):
     d = request.get_json(silent=True) or {}
-    if "active" in d:
-        if uid == g.user["id"] and not d["active"]:
-            return err("Você não pode desativar o próprio usuário.")
-        db().execute("UPDATE users SET active=? WHERE id=?", (1 if d["active"] else 0, uid))
+    deactivate = "active" in d and not d["active"]
+    if deactivate and uid == g.user["id"]:
+        return err("Você não pode desativar o próprio usuário.")
+    pw_hash = None
     if d.get("password"):
         if error := password_error(d["password"]):
             return err(error)
         pw_hash = generate_password_hash(d["password"])
+    db().execute("BEGIN IMMEDIATE")  # dois donos mexendo ao mesmo tempo: um espera o outro
+    if deactivate and not db().execute("SELECT 1 FROM users WHERE role='dono' AND active=1 AND id<>?",
+                                       (uid,)).fetchone():
+        db().rollback()
+        return err("O sistema precisa de ao menos um dono ativo.")
+    if "active" in d:
+        db().execute("UPDATE users SET active=? WHERE id=?", (0 if deactivate else 1, uid))
+    if pw_hash:
         db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, uid))
         if uid == g.user["id"]:
             session["pw"] = password_mark(pw_hash)  # quem redefiniu a propria senha continua logado aqui
