@@ -75,7 +75,7 @@ nav.tabs .dot { position: absolute; top: 8px; left: calc(50% + 6px); min-width: 
 .btn.sm { min-height: 38px; padding: 6px 12px; font-size: .9rem; }
 .btn[disabled] { opacity: .5; }
 label.f { display: block; margin-bottom: 12px; }
-label.f > span { display: block; font-weight: 600; font-size: .86rem; margin-bottom: 4px; color: var(--ink-2); }
+label.f > span, .flabel { display: block; font-weight: 600; font-size: .86rem; margin-bottom: 4px; color: var(--ink-2); }
 input, select, textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; min-height: 46px; }
 input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgb(0 98 177 / .18); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -128,6 +128,7 @@ button.stat.warn b { color: #8a5a00; }
 .overlay { position: fixed; inset: 0; background: rgb(6 25 36 / .55); z-index: 20; display: flex; align-items: flex-end; justify-content: center; animation: fade .15s ease-out; }
 .sheet { background: var(--frost); width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; border-radius: 22px 22px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); animation: up .2s ease-out; }
 @media (min-width: 700px) { .overlay { align-items: center; } .sheet { border-radius: 22px; } }
+.sheet:focus { outline: none; } /* o foco vai para a folha só para o leitor de tela e o Tab */
 @keyframes up { from { transform: translateY(24px); opacity: 0; } }
 @keyframes fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sheet, .overlay { animation: none; } }
