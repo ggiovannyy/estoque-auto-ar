@@ -90,8 +90,13 @@ exato do sistema de notas.
    Pasta do OneDrive / Google Drive (sincronizada com a nuvem pelo próprio Windows)
 ```
 
-- **Servidor:** o próprio computador da oficina roda o Flask (servidor embutido, `threaded=True`). Sem hospedagem nem
-  custo mensal. Só funciona com o computador ligado e dentro da rede da oficina.
+- **Servidor:** o próprio computador da oficina roda o Flask (servidor embutido do Werkzeug, uma thread por conexão,
+  montado em `server.py`). Sem hospedagem nem custo mensal. Só funciona com o computador ligado e dentro da rede da
+  oficina.
+  - O Wi-Fi da oficina é **o mesmo dos clientes**: a rede não é confiável.
+  - Até o PR #14 o servidor https travava para todos com uma única conexão parada (o Werkzeug fazia o handshake no
+    `accept()`, sem tempo limite). Agora o handshake roda na thread de cada conexão, e uma conexão parada é fechada
+    depois de 30 s.
 - **Banco:** SQLite, um arquivo em `data/estoque.db`, em modo **WAL**.
 - **HTTPS:** obrigatório porque o navegador do celular só libera a câmera em contexto seguro. O `run.py` gera um
   **certificado autoassinado** (`tls.py`, biblioteca `cryptography`) em `data/cert.pem` e `data/key.pem`. No primeiro
@@ -114,7 +119,8 @@ exato do sistema de notas.
 | `security.py` | ~88 | Regras sem dependência do Flask: senha mínima, `LoginThrottle`, `csv_safe`, cabeçalhos de segurança/CSP |
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
 | `tls.py` | ~80 | Certificado https autoassinado nas regras da Apple; refeito quando vence, muda o IP ou está fora das regras |
-| `run.py` | ~56 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
+| `server.py` | ~30 | Servidor web (Werkzeug): handshake https na thread de cada conexão e tempo limite de 30 s |
+| `run.py` | ~62 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
 | `static/index.html` | — | Casca da página |
 | `static/app.js` | ~373 | Toda a interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
 | `static/app.css` | ~169 | Estilos (tokens de cor em `:root`) |
@@ -124,7 +130,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~870 | 95 testes pytest da API |
+| `tests/` | ~920 | 97 testes pytest da API |
 | `e2e/` | ~230 | 10 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
@@ -227,6 +233,8 @@ settings   (key, value)                             -- min_default = '2'
   - API com `Cache-Control: no-store`.
 - **Cookie:** `HttpOnly`, `SameSite=Lax` e `Secure` quando roda em https. A chave secreta fica em `data/secret.key`
   (0600).
+- **Disponibilidade:** uma conexão parada (celular que perdeu o Wi-Fi, varredura de rede) não trava o servidor https
+  e é fechada depois de 30 s (`server.py`, testado em `tests/test_servidor.py`).
 - **Escape de HTML** com `esc()` em todo texto vindo do usuário no `app.js`.
 - **CSRF:** mitigado por SameSite=Lax mais o corpo JSON (`get_json` exige `Content-Type: application/json`).
 
@@ -259,7 +267,7 @@ settings   (key, value)                             -- min_default = '2'
 | **Não usar Firebase** | O plano gratuito (Spark) não roda o servidor Python. Seria reescrever o backend (Firestore, Auth, Security Rules), depender de internet, ter cotas diárias (~50 mil leituras / 20 mil gravações por dia, a confirmar) e o backup automático exige plano pago. Fica como possível "fase 2" se o cliente quiser acesso de fora |
 | Se precisar de acesso de fora no futuro | Preferir **Tailscale** (mantém tudo local) ou hospedagem Python (ex.: PythonAnywhere). Na nuvem, considerar trocar SQLite por PostgreSQL |
 | SQLite em vez de banco servidor | Poucos usuários e poucas mil peças; nada para instalar ou manter |
-| Servidor embutido do Flask | Suficiente para a oficina; `waitress` não suporta SSL, e o https é necessário para a câmera |
+| Servidor embutido do Flask | Suficiente para a oficina; `waitress` não suporta SSL, e o https é necessário para a câmera. Sobe por `server.make_server`, nunca por `app.run(ssl_context=...)` (ver PR #14) |
 | JS puro sem build | Manutenção simples, nada para compilar na oficina |
 | `html5-qrcode` copiado localmente | Funciona sem CDN e sem internet. A biblioteca está sem manutenção desde 2023; avaliar `BarcodeDetector` nativo no futuro |
 | Sem integração com o sistema de notas | O próprio cliente preferiu baixa manual, porque há venda sem nota |
@@ -301,6 +309,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
    (PR #9, item 14), limpeza do `app.js` (PR #10), testes de
    interface (PR #11) e CI no GitHub Actions (PR #12).
 6. Testes práticos: certificado https nas regras da Apple, que o iPhone recusava (PR #13).
+7. Auditoria do backend (10/11/2026), com a lista de achados BE-01 a BE-19. Fase 1: servidor https que travava
+   com uma conexão parada (BE-01, PR #14).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -387,9 +397,9 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 95 testes da API, ~19 s
+pytest -q            # 97 testes da API, ~20 s
 pytest -q e2e        # 10 testes de interface, ~15 s
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py tests/ e2e/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -435,7 +445,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py test
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 95 passed).
+2. Rodar `pytest -q` (esperado: 97 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
