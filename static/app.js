@@ -50,8 +50,12 @@ function onSubmit(form, send) {
     try { await send(form); } finally { delete form.dataset.busy; buttons.forEach((b) => (b.disabled = false)); }
   };
 }
-/* Mensagem de erro dentro de um formulário (login, folhas). */
-const showError = (sel, e) => { $(sel).innerHTML = `<div class="err">${esc(e.message)}</div>`; };
+/* Mensagem de erro dentro de um formulário (login, folhas), rolando a tela até ela se estiver fora da vista. */
+const showError = (sel, e) => {
+  const box = $(sel);
+  box.innerHTML = `<div class="err" role="alert">${esc(e.message)}</div>`;
+  box.firstChild.scrollIntoView({ block: "nearest" });
+};
 const fmtDate = (s) => {
   const [d, t] = s.split(" ");
   const [, m, dd] = d.split("-");
@@ -367,7 +371,7 @@ async function openProduct(id) {
     <button class="btn block" id="mgo">Registrar saída</button>
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
-      <button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
+      <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
   const qty = $("#mqty"), go = $("#mgo");
   const setType = (t) => { type = t;
     sheetRoot.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.type === t));
@@ -389,7 +393,7 @@ async function openProduct(id) {
     try {
       await api("/products/" + id, { method: "PUT", body: formBody(f) });
       closeSheet(); toast("Dados salvos."); await refresh();
-    } catch (er) { showError("#merr", er); }
+    } catch (er) { showError("#eerr", er); }
   });
   const del = $("#del");
   if (del) del.onclick = async () => {

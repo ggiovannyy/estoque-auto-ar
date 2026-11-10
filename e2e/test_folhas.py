@@ -60,3 +60,18 @@ def test_contagem_nao_troca_o_rotulo_da_observacao(page, api):
 
     page.locator('[data-type="out"]').click()
     expect(page.get_by_label("Quantidade", exact=True)).to_have_value("1")
+
+
+# ---------------------------------------------------------------- erro na edição (FE-04)
+def test_erro_ao_salvar_a_edicao_aparece_junto_do_formulario(page, api):
+    other, p = api.product(barcode=unique_barcode()), api.product()
+    page.set_viewport_size({"width": 390, "height": 700})
+    page.goto("/")
+    open_product(page, p)
+    page.get_by_text("Editar dados da peça").click()
+    page.fill('#editform input[name="barcode"]', other["barcode"])
+    page.locator("#editform button.btn:not(.danger)").click()
+
+    error = page.locator("#editform .err")
+    expect(error).to_contain_text("código de barras")
+    expect(error).to_be_in_viewport()
