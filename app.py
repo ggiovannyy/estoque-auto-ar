@@ -453,7 +453,18 @@ def move(pid):
     qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
     if qty is None:
         return err(f"Informe uma quantidade válida, até {MAX_QTY}. {QTY_HINT}")
+    expected = None  # na contagem: o saldo que o dono via ao contar
+    if mtype == "adjust" and d.get("expected") is not None:
+        expected = to_int(d["expected"], maximum=MAX_QTY)
+        if expected is None:
+            return err("Saldo anterior inválido.")
     db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
+    if expected is not None:
+        row = db().execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
+        if row and row["qty"] != expected:  # vendeu ou entrou peça enquanto se contava: a contagem apagaria isso
+            db().rollback()
+            return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
+                                 "Confira e salve de novo.", qty=row["qty"]), 409
     new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"])
     if e:
         db().rollback()
