@@ -32,7 +32,7 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `inputs.py`: leitura e validação do que chega nas requisições (`json_body`, `text`, `secret`, `to_int`, limites).
   - `logs.py`: log em `data/logs/sistema.log` (e no console), ligado pelo `run.py` antes de importar o app.
   - `run.py`: garante o certificado, inicia o backup e o servidor.
-- **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
+- **Interface:** `static/app.js`, `static/lote.js` (leitura em sequência) e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
   Mudança de interface ganha teste em `e2e/`.
 - **CI:** `.github/workflows/testes.yml` roda pyflakes e `pytest -q` (Windows e Linux, Python 3.13 e 3.14),
@@ -45,8 +45,8 @@ arquitetura, decisões, histórico e a lista de pendências.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
-pytest -q                                   # 164 testes da API (pasta tests/)
-pytest -q e2e                               # 25 testes de interface no navegador (pasta e2e/)
+pytest -q                                   # 177 testes da API (pasta tests/)
+pytest -q e2e                               # 50 testes de interface no navegador (pasta e2e/)
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)

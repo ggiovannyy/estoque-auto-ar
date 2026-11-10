@@ -126,8 +126,9 @@ exato do sistema de notas.
 | `server.py` | ~30 | Servidor web (Werkzeug): handshake https na thread de cada conexão e tempo limite de 30 s |
 | `run.py` | ~62 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
 | `static/index.html` | — | Casca da página |
-| `static/app.js` | ~373 | Toda a interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
-| `static/app.css` | ~169 | Estilos (tokens de cor em `:root`) |
+| `static/app.js` | ~575 | A interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
+| `static/lote.js` | ~150 | Leitura em sequência da aba Escanear (lista guardada no navegador, gravada pela rota de lote) |
+| `static/app.css` | ~200 | Estilos (tokens de cor em `:root`) |
 | `static/vendor/html5-qrcode.min.js` | — | Biblioteca de leitura por câmera, **v2.3.8, copiada localmente** (sem CDN) |
 | `static/logo.png`, `static/logo-sem-slogan.png` | — | Logo da oficina (login, barra lateral e cabeçalho do celular) |
 | `static/icon.svg`, `manifest.webmanifest` | — | Ícone provisório e PWA |
@@ -135,8 +136,8 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~1500 | 164 testes pytest da API |
-| `e2e/` | ~530 | 25 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `tests/` | ~1660 | 177 testes pytest da API |
+| `e2e/` | ~950 | 50 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -195,6 +196,7 @@ settings   (key, value)                             -- min_default = '2'
 | `POST /api/products`, `PUT /api/products/<id>` | logado | Cadastro (com `qty` inicial) e edição |
 | `DELETE /api/products/<id>` | dono | Exclusão lógica |
 | `POST /api/products/<id>/move` | logado; `adjust` só dono | `{type: in|out|adjust, qty, note, request_id?, expected?}`; `qty` até 100000. `request_id` repetido: 200 sem gravar de novo. `expected` (contagem) diferente do saldo: 409 com `qty` atual |
+| `POST /api/products/moves` | logado; `adjust` só dono | Lote da leitura em sequência: `{type: in|adjust, items: [{product_id, qty, expected?}], note?, request_id?}`, de 1 a 500 peças, tudo ou nada numa transação. Cada item grava `request_id#n`; reenvio responde 200 sem gravar. `expected` diferente: 409 com `changed: [{product_id, qty}]`. |
 | `GET /api/summary` | logado | Totais e quantidade em alerta |
 | `GET /api/movements?limit=` | logado | Histórico (máximo 500) |
 | `GET /api/export.csv` | logado | Planilha (`;`, BOM UTF-8, protegida contra fórmulas) |
@@ -205,12 +207,16 @@ settings   (key, value)                             -- min_default = '2'
 
 ### 3.5 Interface (abas)
 
-- **Estoque:** resumo (peças, unidades, em alerta), busca, filtros por categoria, lista agrupada por categoria e
-  botão "+ Nova peça".
+- **Estoque:** resumo (peças, unidades, em alerta), busca com o botão "+ Nova peça" ao lado (sem botão flutuante, que
+  cobria a quantidade), filtros por categoria e lista agrupada por categoria. A partir de 1200 px a lista vira colunas
+  alinhadas (Peça, Código, Marca, Estoque).
 - **Alertas:** peças com estoque ≤ mínimo. Busca **sempre** `/products?low=1`, independente do filtro da aba Estoque.
 - **Escanear:** campo para o leitor USB (o leitor "digita" o código e manda Enter) e botão de câmera (`html5-qrcode`
-  com `BarcodeDetector` quando disponível). Se a peça existe, abre a folha de movimentação; se não existe, abre o
-  cadastro com o código preenchido.
+  com `BarcodeDetector` quando disponível). Dois modos:
+  - **Uma peça por vez:** se a peça existe, abre a folha de movimentação; se não existe, abre o cadastro com o código.
+  - **Leitura em sequência** (`static/lote.js`): cada leitura entra numa lista (ler de novo soma 1; a quantidade pode ser
+    corrigida), código desconhecido fica pendente com "Cadastrar", e um botão grava tudo de uma vez em
+    `POST /api/products/moves`. Entrada (todos) ou Contagem (só o dono). A lista fica no `localStorage` por usuário.
 - **Histórico:** últimas 100 movimentações.
 - **Mais:** exportar CSV; mínimo padrão (dono); **Backup** (dono: última cópia, pasta, "Fazer backup agora" e aviso
   "Atrasado" com mais de 48 h); categorias; usuários (dono); trocar senha; sair.
@@ -466,8 +472,8 @@ para o porte.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 164 testes da API, ~45 s
-pytest -q e2e        # 25 testes de interface, ~35 s
+pytest -q            # 177 testes da API, ~50 s
+pytest -q e2e        # 50 testes de interface, ~75 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
