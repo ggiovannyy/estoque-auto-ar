@@ -109,8 +109,17 @@ async function loadAll() {
 /* Busca e filtro de categoria só mudam a lista: resumo e categorias continuam valendo. */
 async function reloadProducts() {
   try { if (!(await loadProducts())) return false; } catch (e) { toast(e.message, true); }
-  render();
+  showProducts();
   return true;
+}
+/* Redesenha só a lista da aba Estoque (o campo de busca continua o mesmo, com o foco e o teclado do celular). */
+function showProducts() {
+  const box = $("#plist");
+  if (!box || S.tab !== "stock") return render();
+  const key = focusKey(document.activeElement); // ex.: o filtro clicado continua com o foco depois de redesenhado
+  box.innerHTML = productListHtml();
+  const again = key && document.activeElement === document.body && $(key);
+  if (again) again.focus({ preventScroll: true });
 }
 /* Dados proprios de cada aba (independentes da busca/filtro da aba Estoque). */
 async function loadTabData() {
@@ -183,8 +192,7 @@ function itemRow(p) {
 /* Cabeçalho das colunas da lista: só aparece em tela larga (computador), onde código e marca viram colunas. */
 const LIST_HEADER = '<div class="cols" aria-hidden="true"><span>Peça</span><span>Código</span><span>Marca</span><span>Estoque</span></div>';
 
-function stockView() {
-  const s = S.summary || { items: 0, units: 0, low: 0 };
+function productListHtml() {
   const groups = {};
   S.products.forEach((p) => (groups[p.category || "Sem categoria"] ||= []).push(p));
   const list = Object.keys(groups).length
@@ -192,20 +200,24 @@ function stockView() {
     : `<div class="empty">${S.q || S.cat ? "Nenhuma peça encontrada." : "Nenhuma peça cadastrada ainda.<br>Toque em <b>+ Nova peça</b> ou use <b>Escanear</b>."}</div>`;
   const chips = [`<button class="chip" data-cat="0" aria-pressed="${!S.cat}">Todas</button>`]
     .concat(S.cats.filter((c) => c.products || c.id === S.cat).map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${S.cat === c.id}">${esc(c.name)} (${c.products})</button>`)).join("");
+  return `<div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
+    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`;
+}
+function stockView() {
+  const s = S.summary || { items: 0, units: 0, low: 0 };
   shell(`<h2 class="sr">Estoque</h2><div class="stats">
       <div class="stat"><b>${s.items}</b><span>peças cadastradas</span></div>
       <div class="stat"><b>${s.units}</b><span>unidades</span></div>
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
     <div class="searchrow"><div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
       <button class="btn new" data-act="new" aria-label="Nova peça"><span aria-hidden="true">+</span><span class="lbl">Nova peça</span></button></div>
-    <div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
-    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`);
+    <div id="plist">${productListHtml()}</div>`);
 }
 
 function alertsView() {
   const low = S.low; // lista completa vinda do servidor, ja ordenada por quantidade
   shell(`<h2 class="page">Alertas de estoque</h2>
-    <p class="muted" style="margin-top:-6px">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
+    <p class="muted lead">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
     ${low.length ? `${LIST_HEADER}<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
 }
 
@@ -235,18 +247,18 @@ function moreView() {
       <div class="setting"><div class="l">Exportar estoque<small>Planilha para Excel (CSV)</small></div><a class="btn sm ghost" href="/api/export.csv">Baixar</a></div></div>
     ${owner ? `<div class="section card"><h3>Alerta de estoque baixo</h3>
       <form id="minform" class="setting"><div class="l">Avisar quando restar até<small>Cada peça pode ter seu próprio mínimo</small></div>
-      <div style="display:flex;gap:8px;width:150px"><input name="min" type="number" min="0" value="${S.minDefault}" aria-label="Mínimo padrão"><button class="btn sm">OK</button></div></form></div>
+      <div class="min-input"><input name="min" type="number" min="0" value="${S.minDefault}" aria-label="Mínimo padrão"><button class="btn sm">OK</button></div></form></div>
     <div class="section card"><h3>Backup</h3><div id="backupbox"><span class="muted">Carregando…</span></div>
-      <button class="btn sm ghost" data-act="backup" style="margin-top:10px">Fazer backup agora</button></div>
+      <button class="btn sm ghost" data-act="backup">Fazer backup agora</button></div>
     <div class="section card"><h3>Categorias</h3><div id="catbox"></div>
       ${CAT_FORM}</div>
     <div class="section card"><h3>Usuários</h3><div id="userbox"></div>
-      <button class="btn sm ghost" data-act="newuser" style="margin-top:10px">+ Novo usuário</button></div>` : `<div class="section card"><h3>Categorias</h3>
+      <button class="btn sm ghost" data-act="newuser">+ Novo usuário</button></div>` : `<div class="section card"><h3>Categorias</h3>
       ${CAT_FORM}</div>`}
     <div class="section card"><h3>Minha conta</h3>
       <div class="setting"><div class="l">${esc(S.user.name)}<small>${S.user.role === "dono" ? "Dono" : "Atendente"} · ${esc(S.user.username)}</small></div>
       <button class="btn sm ghost" data-act="pw">Trocar senha</button></div>
-      <button class="btn dark block" data-act="logout" style="margin-top:8px">Sair</button></div>`);
+      <button class="btn dark block" data-act="logout">Sair</button></div>`);
   if (owner) { renderCats(); renderUsers(); renderBackup(); }
   onSubmit($("#catform"), async (f) => {
     try {
@@ -279,13 +291,23 @@ async function renderBackup() {
 async function renderUsers() {
   try { const us = await api("/users");
     $("#userbox").innerHTML = us.map((u) => `<div class="setting"><div class="l">${esc(u.name)}${u.active ? "" : " (inativo)"}<small>${esc(u.username)} · ${u.role === "dono" ? "Dono" : "Atendente"}</small></div>
-      <div style="display:flex;gap:6px"><button class="btn sm ghost" data-resetpw="${u.id}">Senha</button>
+      <div class="actions"><button class="btn sm ghost" data-resetpw="${u.id}">Senha</button>
       ${u.id !== S.user.id ? `<button class="btn sm ghost" data-toggleuser="${u.id}" data-active="${u.active ? 0 : 1}">${u.active ? "Desativar" : "Ativar"}</button>` : ""}</div></div>`).join("");
   } catch (e) { toast(e.message, true); }
 }
 
 /* ---------------------------------------------------------------- scan */
-let scanner = null;
+let scanner = null, cameraLib = null;
+/* A biblioteca da câmera (375 KB) só carrega no primeiro uso: quem usa o leitor USB nunca a baixa. */
+function loadCameraLib() {
+  cameraLib ||= new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = "/static/vendor/html5-qrcode.min.js"; s.onload = ok;
+    s.onerror = () => { cameraLib = null; s.remove(); fail(new Error("Não consegui carregar a câmera. Tente de novo.")); };
+    document.head.append(s);
+  });
+  return cameraLib;
+}
 async function stopCamera() {
   if (!scanner) return;
   try { await scanner.stop(); scanner.clear(); } catch {}
@@ -310,10 +332,14 @@ function scanView() {
 async function startCamera() {
   const box = $("#reader"), btn = $("#cam");
   if (scanner) { await stopCamera(); box.hidden = true; btn.textContent = "Usar a câmera do celular"; return; }
+  if (!box.hidden) return; // ainda abrindo (carregando a biblioteca ou pedindo permissão): ignora o segundo toque
   if (!navigator.mediaDevices || !window.isSecureContext) {
     toast("A câmera só funciona em conexão segura (https). Veja o passo a passo no README.", true); return;
   }
   box.hidden = false; btn.textContent = "Fechar câmera";
+  try { await loadCameraLib(); } catch (e) {
+    box.hidden = true; btn.textContent = "Usar a câmera do celular"; toast(e.message, true); return;
+  }
   const F = Html5QrcodeSupportedFormats;
   scanner = new Html5Qrcode("reader", {
     formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE],
@@ -339,7 +365,7 @@ async function handleCode(code) {
 /* ---------------------------------------------------------------- sheets */
 /* Quem abriu a folha (seletor, porque a lista pode ser redesenhada): recebe o foco de volta ao fechar. */
 let sheetOpener = null;
-const FOCUS_KEYS = ["data-open", "data-act", "data-tab", "data-resetpw", "id"];
+const FOCUS_KEYS = ["data-open", "data-act", "data-tab", "data-cat", "data-resetpw", "id"];
 function focusKey(el) {
   const a = el && el !== document.body && FOCUS_KEYS.find((k) => el.hasAttribute(k));
   return a ? `[${a}="${CSS.escape(el.getAttribute(a))}"]` : null;
@@ -425,7 +451,7 @@ async function openProduct(id) {
     <button class="btn block out" id="mgo">Registrar saída</button>
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
-      <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
+      <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del">Excluir peça</button>` : ""}</form></details>`);
   const qty = $("#mqty"), note = $("#mnote"), go = $("#mgo");
   // Um id por intenção: reenviar a mesma depois de "Sem conexão" não grava de novo; mudar o pedido gera outro id.
   let requestId = newRequestId();
@@ -536,7 +562,7 @@ document.addEventListener("click", async (e) => {
   switch (t.dataset.act) {
     case "new": return openForm();
     case "more": t.disabled = true;
-      try { if (await loadProducts(true)) render(); } catch (er) { toast(er.message, true); t.disabled = false; }
+      try { if (await loadProducts(true)) showProducts(); } catch (er) { toast(er.message, true); t.disabled = false; }
       return;
     case "retry": t.disabled = true; await refresh(); t.disabled = false; return;
     case "pw": return openPw();
@@ -553,10 +579,8 @@ document.addEventListener("input", (e) => {
   if (e.target.id !== "q") return;
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
-    S.q = e.target.value.trim(); const pos = e.target.selectionStart;
-    if (!(await reloadProducts())) return;
-    const q = $("#q"); // com uma folha aberta (abriu uma peça antes da busca terminar), o foco fica nela
-    if (q && !sheetRoot.firstChild) { q.focus(); q.setSelectionRange(pos, pos); }
+    S.q = e.target.value.trim();
+    await reloadProducts();
   }, 250);
 });
 
