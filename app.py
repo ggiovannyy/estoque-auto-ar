@@ -271,10 +271,13 @@ def add_category():
 @app.delete("/api/categories/<int:cid>")
 @login_required(owner=True)
 def del_category(cid):
-    if db().execute("SELECT 1 FROM products WHERE category_id=? AND active=1", (cid,)).fetchone():
+    db().execute("BEGIN IMMEDIATE")  # ninguém cadastra peça nessa categoria enquanto ela é excluída
+    db().execute("UPDATE products SET category_id=NULL WHERE category_id=? AND active=0", (cid,))
+    try:
+        db().execute("DELETE FROM categories WHERE id=?", (cid,))
+    except sqlite3.IntegrityError:  # chave estrangeira: ainda há peça ativa nela
+        db().rollback()
         return err("Há peças nessa categoria. Mova-as antes de excluir.")
-    db().execute("UPDATE products SET category_id=NULL WHERE category_id=?", (cid,))
-    db().execute("DELETE FROM categories WHERE id=?", (cid,))
     db().commit()
     return jsonify(ok=True)
 
