@@ -129,15 +129,16 @@ exato do sistema de notas.
 | `static/app.js` | ~575 | A interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
 | `static/lote.js` | ~150 | Leitura em sequência da aba Escanear (lista guardada no navegador, gravada pela rota de lote) |
 | `static/app.css` | ~200 | Estilos (tokens de cor em `:root`) |
-| `static/vendor/html5-qrcode.min.js` | — | Biblioteca de leitura por câmera, **v2.3.8, copiada localmente** (sem CDN) |
+| `static/vendor/html5-qrcode.min.js` | — | Biblioteca de leitura por câmera, **v2.3.8, copiada localmente** (sem CDN); carregada só no primeiro uso da câmera |
+| `static/fonts/` | — | Barlow e Barlow Semi Condensed (woff2, subconjunto latino) e a licença OFL |
 | `static/logo.png`, `static/logo-sem-slogan.png` | — | Logo da oficina (login, barra lateral e cabeçalho do celular) |
-| `static/icon.svg`, `manifest.webmanifest` | — | Ícone provisório e PWA |
+| `static/icon.svg`, `icon-180/192/512.png`, `manifest.webmanifest` | — | Ícone provisório (PNG gerados do SVG: apple-touch-icon e manifesto) e PWA |
 | `iniciar.bat` / `iniciar.sh` | — | Cria `.venv`, instala dependências (reinstala quando `requirements.txt` muda) e roda `run.py` |
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~1660 | 177 testes pytest da API |
-| `e2e/` | ~1010 | 61 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `tests/` | ~1700 | 181 testes pytest da API |
+| `e2e/` | ~1100 | 67 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -236,8 +237,8 @@ settings   (key, value)                             -- min_default = '2'
   - As imagens da logo saíram do PNG enviado pelo cliente: recortadas, com fundo transparente e as cores levadas às
     três da marca (vermelho, azul e preto). Ainda não há versão vetorial nem ícone quadrado: `icon.svg` (aba do
     navegador e PWA) continua o provisório.
-  - Fontes: Barlow Semi Condensed (títulos) e Barlow (texto), do Google Fonts, com fonte do sistema como reserva se
-    não houver internet. No desktop (≥ 900px) a navegação vira barra lateral.
+  - Fontes: Barlow Semi Condensed (títulos) e Barlow (texto), servidas pelo próprio sistema (`static/fonts`). No
+    desktop (≥ 900px) a navegação vira barra lateral.
   - `e2e/test_identidade_visual.py` confere a logo e o contraste (≥ 4,5:1) do botão principal e da barra lateral.
 
 ---
@@ -255,8 +256,8 @@ settings   (key, value)                             -- min_default = '2'
   primeiro acesso no computador.
 - **CSV:** textos começando com `= + - @ \t \r` recebem `'` na frente (`csv_safe`).
 - **Cabeçalhos:**
-  - CSP com `script-src 'self'`; `style-src` permite `'unsafe-inline'` porque os templates usam `style="..."`.
-  - Fontes do Google liberadas.
+  - CSP só com `'self'` para scripts, estilos e fontes: sem `'unsafe-inline'` (a tela não usa `style="..."`) e sem
+    servidores de fora (`tests/test_cabecalhos.py`, `e2e/test_csp.py`).
   - `X-Frame-Options DENY`, `nosniff`, `Referrer-Policy same-origin` e `Permissions-Policy camera=(self)`.
   - API com `Cache-Control: no-store`.
 - **Sessão:** o cookie guarda o `uid` e uma marca da senha. Trocar ou redefinir a senha derruba as sessões abertas com a
@@ -475,8 +476,8 @@ para o porte.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 177 testes da API, ~50 s
-pytest -q e2e        # 61 testes de interface, ~85 s
+pytest -q            # 181 testes da API, ~50 s
+pytest -q e2e        # 67 testes de interface, ~85 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
@@ -490,8 +491,9 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py serv
 - Fixtures: `page` (computador, 1280×800, já logado), `phone` (celular 390×844 com toque) e `api` (cria peças e
   categorias pela API, com a sessão do navegador). Um erro de JavaScript na página faz o teste falhar.
 - Todos os testes usam o mesmo banco: nomes e códigos únicos vêm de `e2e/dados.py`.
-- A câmera não é testada (no começo do projeto foi verificada à mão com o Chromium e
-  `--use-fake-device-for-media-stream`).
+- A câmera é testada com a câmera falsa do Chromium (`--use-fake-device-for-media-stream`, em
+  `e2e/test_desempenho.py`): a biblioteca carrega sob demanda e o vídeo abre. A leitura de um código pela câmera
+  continua sem teste automático.
 
 ---
 
