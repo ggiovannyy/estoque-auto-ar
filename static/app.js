@@ -91,11 +91,14 @@ async function loadTabData() {
 async function refresh() { try { await loadAll(); await loadTabData(); } catch (e) { toast(e.message, true); } render(); }
 
 /* ---------------------------------------------------------------- views */
+/* Logo da oficina no login: só a imagem na tela; o leitor de tela ouve também o nome do sistema. */
+const LOGIN_LOGO = `<h1 class="logo"><img src="/static/logo.png" alt="Maxx Auto Ar" width="720" height="202">
+  <span class="sr">Controle de estoque</span></h1>`;
+
 function authView() {
   if (S.setupNeeded && !S.setupHere) return setupElsewhereView();
   const setup = S.setupNeeded;
-  app.innerHTML = `<div class="login">
-    <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
+  app.innerHTML = `<div class="login">${LOGIN_LOGO}
     <form id="auth" class="card">
       <div id="autherr"></div>
       ${setup ? `<div class="info">Primeiro acesso: crie o usuário do dono da oficina.</div>
@@ -112,8 +115,7 @@ function authView() {
 }
 
 function setupElsewhereView() {
-  app.innerHTML = `<div class="login">
-    <div class="logo"><img src="/static/icon.svg" alt=""><h1>Maxx Auto Ar<small>Controle de estoque</small></h1></div>
+  app.innerHTML = `<div class="login">${LOGIN_LOGO}
     <div class="info">O sistema ainda não foi configurado. Faça o primeiro acesso no computador da oficina,
       em <b>https://localhost:8443</b>, para criar o usuário do dono. Depois é só entrar por aqui.</div></div>`;
 }
@@ -130,7 +132,8 @@ function shell(inner) {
     const dot = k === "alerts" && lowCount() ? `<span class="dot">${lowCount()}</span>` : "";
     return `<button data-tab="${k}"${cur}>${svg(ic)}${label}${dot}</button>`; }).join("");
   app.innerHTML = `<div class="shell">
-    <header class="top"><div class="brand"><img src="/static/icon.svg" alt=""><div>Maxx Auto Ar<small>Estoque</small></div></div>
+    <header class="top"><picture class="brand"><source media="(min-width: 900px)" srcset="/static/logo.png">
+      <img src="/static/logo-sem-slogan.png" alt="Maxx Auto Ar"></picture>
       <div class="who">${esc(S.user.name)}</div></header>
     <nav class="tabs" aria-label="Seções">${nav}</nav>
     <main><div class="wrap">${inner}</div></main></div>`;

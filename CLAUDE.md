@@ -46,7 +46,7 @@ arquitetura, decisões, histórico e a lista de pendências.
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
 pytest -q                                   # 164 testes da API (pasta tests/)
-pytest -q e2e                               # 11 testes de interface no navegador (pasta e2e/)
+pytest -q e2e                               # 17 testes de interface no navegador (pasta e2e/)
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
