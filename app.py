@@ -276,7 +276,11 @@ def products():
         sql = f"SELECT * FROM ({sql}) WHERE low=1"
         sql += " ORDER BY qty, name COLLATE NOCASE"
     else:
-        sql += " ORDER BY c.name COLLATE NOCASE, p.name COLLATE NOCASE"
+        sql += " ORDER BY c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id"
+    limit = to_int(request.args.get("limit"), minimum=1)
+    if limit:  # a tela pede de página em página; sem limit vem a lista inteira
+        sql += " LIMIT :limit OFFSET :offset"
+        args.update(limit=limit, offset=to_int(request.args.get("offset"), 0))
     rows = db().execute(sql, args).fetchall()
     return jsonify([product_dict(r) for r in rows])
 
