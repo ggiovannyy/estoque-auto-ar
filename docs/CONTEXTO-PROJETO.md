@@ -116,8 +116,10 @@ exato do sistema de notas.
 | `iniciar.bat` / `iniciar.sh` | — | Cria `.venv`, instala dependências (reinstala quando `requirements.txt` muda) e roda `run.py` |
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
-| `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0` |
-| `tests/` | ~785 | 87 testes pytest |
+| `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
+| `tests/` | ~785 | 87 testes pytest da API |
+| `e2e/` | ~230 | 10 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -287,7 +289,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
    (PR #3), `iniciar.bat` usando o `py` (PR #4), migrações do banco (PR #5) e códigos UPC-A gravados como EAN-13
    (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7) remoção de `movements.qty` (PR #8, item 10) busca com paginação
-   (PR #9, item 14) e limpeza do `app.js` (PR #10).
+   (PR #9, item 14) limpeza do `app.js` (PR #10) e testes de
+   interface (PR #11).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -298,7 +301,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 [#7](https://github.com/ggiovannyy/estoque-auto-ar/pull/7), juntados à `main`;
 [#8](https://github.com/ggiovannyy/estoque-auto-ar/pull/8), item 10;
 [#9](https://github.com/ggiovannyy/estoque-auto-ar/pull/9), item 14;
-[#10](https://github.com/ggiovannyy/estoque-auto-ar/pull/10), limpeza do `app.js`.
+[#10](https://github.com/ggiovannyy/estoque-auto-ar/pull/10), limpeza do `app.js`;
+[#11](https://github.com/ggiovannyy/estoque-auto-ar/pull/11), testes de interface.
 
 ---
 
@@ -333,7 +337,6 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 
 | # | Item | Sugestão |
 |---|---|---|
-| — | A correção da aba Alertas foi verificada com Playwright, mas **não há teste de frontend no repositório** | Adicionar testes e2e (há a skill `playwright-cli`) |
 | — | Sem CI | GitHub Actions rodando `pytest` |
 
 ### 8.3 Operação e entrega
@@ -374,16 +377,24 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 87 testes, ~17 s
-python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
+python -m playwright install chromium   # uma vez
+pytest -q            # 87 testes da API, ~17 s
+pytest -q e2e        # 10 testes de interface, ~15 s
+python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
 - Fixtures disponíveis: `owner`, `attendant`, `login_client`.
 - Os limitadores de login são zerados a cada teste.
 
-**Verificação no navegador:** foi feita com Playwright (scripts descartáveis), em celular simulado (390×844) e desktop
-(1280×800). Para a câmera foi usado o Chromium com `--use-fake-device-for-media-stream`.
+**Testes de interface (`e2e/`):**
+- O `e2e/conftest.py` sobe `run.py --http` numa porta livre, com `MAXX_DATA` e `MAXX_BACKUP_DIR` temporários, e
+  faz o primeiro acesso por 127.0.0.1. O log do servidor vai para um arquivo (um pipe sem leitor trava o servidor).
+- Fixtures: `page` (computador, 1280×800, já logado), `phone` (celular 390×844 com toque) e `api` (cria peças e
+  categorias pela API, com a sessão do navegador). Um erro de JavaScript na página faz o teste falhar.
+- Todos os testes usam o mesmo banco: nomes e códigos únicos vêm de `e2e/dados.py`.
+- A câmera não é testada (no começo do projeto foi verificada à mão com o Chromium e
+  `--use-fake-device-for-media-stream`).
 
 ---
 

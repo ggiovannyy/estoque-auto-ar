@@ -28,6 +28,8 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `backup.py`: backup diário para a pasta do OneDrive ou do Google Drive.
   - `run.py`: certificado https autoassinado, backup e servidor.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
+- **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
+  Mudança de interface ganha teste em `e2e/`.
 - **Windows:** `iniciar.bat`, `instalar-inicio-automatico.bat` e `remover-inicio-automatico.bat`. Os `.bat` precisam
   ficar com **CRLF** (ver `.gitattributes`).
 
@@ -35,8 +37,10 @@ arquitetura, decisões, histórico e a lista de pendências.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q                                   # 87 testes
-python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
+python -m playwright install chromium       # uma vez, para os testes de interface
+pytest -q                                   # 87 testes da API (pasta tests/)
+pytest -q e2e                               # 10 testes de interface no navegador (pasta e2e/)
+python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```
