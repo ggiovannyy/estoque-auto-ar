@@ -9,9 +9,10 @@ import os
 import socket
 import sys
 
-from app import DATA, DB_PATH, app
 from backup import BackupScheduler
+from paths import DATA, DB_PATH
 from server import make_server
+from single_instance import lock_data_dir
 from tls import ensure_cert
 
 CERT = os.path.join(DATA, "cert.pem")
@@ -35,6 +36,12 @@ def main():
     ap.add_argument("--http", action="store_true", help="usar HTTP simples (sem câmera no celular)")
     ap.add_argument("--port", type=int)
     a = ap.parse_args()
+    lock = lock_data_dir(DATA)  # antes de importar o app: a importação já migra o banco
+    if lock is None:
+        print("\n  O sistema já está aberto neste computador (outra janela ou o início automático).")
+        print("  Use o que já está aberto; para reiniciar, feche-o antes.\n")
+        return 1
+    from app import app
     ips = lan_ips()
     use_https = not a.http
     if use_https and not ensure_cert(CERT, KEY, ips):
