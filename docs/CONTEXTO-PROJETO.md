@@ -117,7 +117,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0` |
-| `tests/` | ~785 | 86 testes pytest |
+| `tests/` | ~785 | 87 testes pytest |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -165,7 +165,7 @@ settings   (key, value)                             -- min_default = '2'
 | `POST /api/setup` | só de 127.0.0.1/::1 e com o banco sem usuários | Cria o dono (primeiro acesso) |
 | `POST /api/login` / `POST /api/logout` | todos | Sessão Flask (cookie assinado) |
 | `GET/POST /api/categories`, `DELETE /api/categories/<id>` | logado; DELETE só dono | Categorias |
-| `GET /api/products?q=&category=&low=1` | logado | Lista e busca; `low=1` traz só alertas |
+| `GET /api/products?q=&category=&low=1&limit=&offset=` | logado | Lista e busca; `low=1` traz só alertas; `limit`/`offset` opcionais (a aba Estoque pede páginas de 200) |
 | `GET /api/products/barcode/<código>` | logado | Busca por código de barras (404 se não existir) |
 | `GET /api/products/<id>` | logado | Detalhe e últimas 15 movimentações |
 | `POST /api/products`, `PUT /api/products/<id>` | logado | Cadastro (com `qty` inicial) e edição |
@@ -286,7 +286,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 4. "Itens rápidos" no PR #2 (backup, início automático, primeiro acesso local, cabeçalhos, versões fixas, CRLF).
 5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
    (PR #3), `iniciar.bat` usando o `py` (PR #4), migrações do banco (PR #5) e códigos UPC-A gravados como EAN-13
-   (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7) e remoção de `movements.qty` (PR #8, item 10).
+   (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7) remoção de `movements.qty` (PR #8, item 10) e busca com paginação
+   (PR #9, item 14).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -295,7 +296,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 [#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5),
 [#6](https://github.com/ggiovannyy/estoque-auto-ar/pull/6) e
 [#7](https://github.com/ggiovannyy/estoque-auto-ar/pull/7), juntados à `main`;
-[#8](https://github.com/ggiovannyy/estoque-auto-ar/pull/8), item 10.
+[#8](https://github.com/ggiovannyy/estoque-auto-ar/pull/8), item 10;
+[#9](https://github.com/ggiovannyy/estoque-auto-ar/pull/9), item 14.
 
 ---
 
@@ -325,12 +327,11 @@ a97e956 Sistema de estoque Maxx Auto Ar
 
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
-Os itens 1 a 13 e o 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5;
-15, UPC-A × EAN-13, no PR #6; 11, 12 e 13 no PR #7; 10 no PR #8). Faltam:
+Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5;
+15, UPC-A × EAN-13, no PR #6; 11, 12 e 13 no PR #7; 10 no PR #8; 14 no PR #9). Faltam:
 
 | # | Item | Sugestão |
 |---|---|---|
-| 14 | Busca recarrega 3 endpoints a cada tecla; `/api/products` sem paginação | Recarregar só produtos; paginar se passar de alguns milhares |
 | Nit | `S.loaded` nunca lido; `tabs` + `order` redundantes; `formBody` sem ganho; HTML da linha de histórico duplicado; linhas muito longas no `app.js` | Limpeza |
 | — | A correção da aba Alertas foi verificada com Playwright, mas **não há teste de frontend no repositório** | Adicionar testes e2e (há a skill `playwright-cli`) |
 | — | Sem CI | GitHub Actions rodando `pytest` |
@@ -373,7 +374,7 @@ Os itens 1 a 13 e o 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 86 testes, ~16 s
+pytest -q            # 87 testes, ~17 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ```
 
@@ -414,7 +415,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 86 passed).
+2. Rodar `pytest -q` (esperado: 87 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
