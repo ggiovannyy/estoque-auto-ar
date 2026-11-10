@@ -94,8 +94,14 @@ exato do sistema de notas.
   custo mensal. Só funciona com o computador ligado e dentro da rede da oficina.
 - **Banco:** SQLite, um arquivo em `data/estoque.db`, em modo **WAL**.
 - **HTTPS:** obrigatório porque o navegador do celular só libera a câmera em contexto seguro. O `run.py` gera um
-  **certificado autoassinado** (biblioteca `cryptography`, válido 10 anos, com o IP da rede no SAN) em `data/cert.pem`
-  e `data/key.pem`. No primeiro acesso, o celular mostra "conexão não segura" e é preciso tocar em Avançado → Continuar.
+  **certificado autoassinado** (`tls.py`, biblioteca `cryptography`) em `data/cert.pem` e `data/key.pem`. No primeiro
+  acesso, o celular mostra "conexão não segura": no Android, Avançado → Continuar; no iPhone, Mostrar detalhes →
+  visitar este site.
+  - **Regras da Apple (iOS 13+):** no máximo 825 dias de validade e uso marcado como servidor (EKU `serverAuth`).
+    Fora disso, o iPhone recusa a conexão **sem opção de continuar**, em qualquer navegador (todos usam o motor do
+    Safari). Até o PR #13 o certificado valia 10 anos, sem EKU, e o iPhone não abria o sistema.
+  - O certificado vale 800 dias e é refeito a cada início quando não segue essas regras, quando faltam 30 dias para
+    vencer ou quando o IP do computador não está nele. Depois de refeito, o celular mostra o aviso uma vez de novo.
 - **Interface:** HTML, CSS e JS puros, sem build e sem framework, mobile-first. É um PWA simples (manifest e ícone),
   sem service worker.
 
@@ -107,7 +113,8 @@ exato do sistema de notas.
 | `migrations.py` | ~95 | Esquema do banco em passos numerados (`MIGRATIONS`), `migrate`, `schema_version`, `SchemaTooNewError` |
 | `security.py` | ~88 | Regras sem dependência do Flask: senha mínima, `LoginThrottle`, `csv_safe`, cabeçalhos de segurança/CSP |
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
-| `run.py` | ~88 | Ponto de entrada: gera certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
+| `tls.py` | ~80 | Certificado https autoassinado nas regras da Apple; refeito quando vence, muda o IP ou está fora das regras |
+| `run.py` | ~56 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
 | `static/index.html` | — | Casca da página |
 | `static/app.js` | ~373 | Toda a interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
 | `static/app.css` | ~169 | Estilos (tokens de cor em `:root`) |
@@ -117,7 +124,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~785 | 87 testes pytest da API |
+| `tests/` | ~870 | 95 testes pytest da API |
 | `e2e/` | ~230 | 10 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
@@ -290,9 +297,10 @@ a97e956 Sistema de estoque Maxx Auto Ar
 4. "Itens rápidos" no PR #2 (backup, início automático, primeiro acesso local, cabeçalhos, versões fixas, CRLF).
 5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
    (PR #3), `iniciar.bat` usando o `py` (PR #4), migrações do banco (PR #5) e códigos UPC-A gravados como EAN-13
-   (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7) remoção de `movements.qty` (PR #8, item 10) busca com paginação
+   (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7), remoção de `movements.qty` (PR #8, item 10), busca com paginação
    (PR #9, item 14), limpeza do `app.js` (PR #10), testes de
    interface (PR #11) e CI no GitHub Actions (PR #12).
+6. Testes práticos: certificado https nas regras da Apple, que o iPhone recusava (PR #13).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -319,12 +327,12 @@ a97e956 Sistema de estoque Maxx Auto Ar
 - [ ] **Liberar o Python no Firewall do Windows** ("Redes privadas"), senão o celular não conecta.
 - [ ] **Testar os `.bat` no Windows.**
   - `iniciar.bat`: testado pelo `cmd` (primeira execução instala e sobe o https; a segunda pula a instalação).
-    Falta abrir com dois cliques pelo Explorador.
+    Em 10/11/2026 abriu com dois cliques por um atalho na área de trabalho, e o celular acessou pela rede.
   - `instalar-inicio-automatico.bat` e `remover-inicio-automatico.bat`: nunca executados.
 - [ ] **Instalar na oficina em pasta de caminho curto** (ex.: `C:\MaxxEstoque`). Num caminho muito longo, a geração
   do certificado falhou ("nome do arquivo muito grande") e o sistema caiu para http, sem câmera no celular.
-- [ ] **Testar a câmera em celular real** (Android e iPhone). Confirmar o fluxo do certificado autoassinado,
-  principalmente no iPhone/Safari.
+- [ ] **Testar a câmera em celular real** (Android e iPhone). Em 10/11/2026 o iPhone recusou o certificado antigo
+  sem opção de continuar; o PR #13 o deixou nas regras da Apple. Falta confirmar o acesso e a câmera no iPhone.
 - [ ] **Testar o leitor USB real.** Confirmar que envia Enter. Ver também a divergência UPC-A (12 dígitos) × EAN-13
   (13 dígitos) entre câmera e leitor, já tratada no PR #6. Falta confirmar com o leitor e a câmera reais.
 - [ ] **Configurar o OneDrive ou o Google Drive** no computador da oficina e confirmar o backup indo para a nuvem.
@@ -379,9 +387,9 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 87 testes da API, ~17 s
+pytest -q            # 95 testes da API, ~19 s
 pytest -q e2e        # 10 testes de interface, ~15 s
-python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py tests/ e2e/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -427,7 +435,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 87 passed).
+2. Rodar `pytest -q` (esperado: 95 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
