@@ -130,8 +130,8 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~920 | 97 testes pytest da API |
-| `e2e/` | ~230 | 10 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `tests/` | ~1050 | 108 testes pytest da API |
+| `e2e/` | ~260 | 11 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -187,7 +187,7 @@ settings   (key, value)                             -- min_default = '2'
 | `GET /api/products/<id>` | logado | Detalhe e últimas 15 movimentações |
 | `POST /api/products`, `PUT /api/products/<id>` | logado | Cadastro (com `qty` inicial) e edição |
 | `DELETE /api/products/<id>` | dono | Exclusão lógica |
-| `POST /api/products/<id>/move` | logado | `{type: in|out|adjust, qty, note}` |
+| `POST /api/products/<id>/move` | logado; `adjust` só dono | `{type: in|out|adjust, qty, note}`; `qty` até 100000 |
 | `GET /api/summary` | logado | Totais e quantidade em alerta |
 | `GET /api/movements?limit=` | logado | Histórico (máximo 500) |
 | `GET /api/export.csv` | logado | Planilha (`;`, BOM UTF-8, protegida contra fórmulas) |
@@ -207,7 +207,7 @@ settings   (key, value)                             -- min_default = '2'
 - **Histórico:** últimas 100 movimentações.
 - **Mais:** exportar CSV; mínimo padrão (dono); **Backup** (dono: última cópia, pasta, "Fazer backup agora" e aviso
   "Atrasado" com mais de 48 h); categorias; usuários (dono); trocar senha; sair.
-- **Folha da peça:** Saída, Entrada ou Contagem, com stepper, observação, últimas movimentações e edição de dados.
+- **Folha da peça:** Saída, Entrada ou Contagem (Contagem só para o dono), com stepper, observação, últimas movimentações e edição de dados.
 - **Design:** azul-petróleo `#0b2b3c`, fundo gelo `#eef5f7`, ação ciano `#0e9db9`, alerta âmbar `#f5a000`, zerado
   vermelho `#c93a26`. Fontes: Barlow Semi Condensed (títulos) e Barlow (texto), do Google Fonts, com fonte do sistema
   como reserva se não houver internet. No desktop (≥ 900px) a navegação vira barra lateral.
@@ -231,6 +231,11 @@ settings   (key, value)                             -- min_default = '2'
   - Fontes do Google liberadas.
   - `X-Frame-Options DENY`, `nosniff`, `Referrer-Policy same-origin` e `Permissions-Policy camera=(self)`.
   - API com `Cache-Control: no-store`.
+- **Sessão:** o cookie guarda o `uid` e uma marca da senha. Trocar ou redefinir a senha derruba as sessões abertas com a
+  antiga; quem trocou a própria senha continua logado no aparelho em que trocou.
+- **Sem https, não abre:** se o certificado não puder ser gerado, o `run.py` explica e sai (http só com `--http`).
+- **Teto de quantidade:** 100000 em movimentações, quantidade inicial e mínimos (o leitor USB pode "digitar" o
+  código de barras no campo de quantidade).
 - **Cookie:** `HttpOnly`, `SameSite=Lax` e `Secure` quando roda em https. A chave secreta fica em `data/secret.key`
   (0600).
 - **Disponibilidade:** uma conexão parada (celular que perdeu o Wi-Fi, varredura de rede) não trava o servidor https
@@ -310,7 +315,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
    interface (PR #11) e CI no GitHub Actions (PR #12).
 6. Testes práticos: certificado https nas regras da Apple, que o iPhone recusava (PR #13).
 7. Auditoria do backend (10/11/2026), com a lista de achados BE-01 a BE-19. Fase 1: servidor https que travava
-   com uma conexão parada (BE-01, PR #14).
+   com uma conexão parada (BE-01, PR #14); não abrir em http sem certificado, teto de quantidade, contagem só do
+   dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #15).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -376,6 +382,34 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 
 - Proposta de preço para o cliente: valor único, mensalidade ou pacote com suporte. Não definido.
 
+### 8.6 Auditoria do backend (10/11/2026)
+
+Auditoria de segurança, concorrência, desempenho e qualidade. Respostas do desenvolvedor: os clientes usam **o mesmo
+Wi-Fi** da oficina; **só o dono define saldo** (Contagem); **não há plano** de acesso de fora. Desempenho: sem gargalo
+para o porte.
+
+| ID | Sev. | Achado | Situação |
+|---|---|---|---|
+| BE-01 | Crítica | Uma conexão parada travava o servidor https para todos | Corrigido (PR #14) |
+| BE-02 | Alta | Sem certificado, o sistema abria em http em silêncio | Corrigido (PR #15) |
+| BE-08 | Alta | Certificado autoassinado + Wi-Fi dos clientes: ataque no meio da conexão | **Operação:** rede de visitantes isolada |
+| BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #15) |
+| BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #15) |
+| BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #15) |
+| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Fase 2 |
+| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Fase 2 |
+| BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Fase 2 |
+| BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Fase 2 |
+| BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Fase 2 |
+| BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Fase 2 |
+| BE-14 | Baixa | Corrida no primeiro acesso | Fase 2 |
+| BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Fase 3 |
+| BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Fase 3 |
+| BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Fase 3 |
+| BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Fase 3 |
+| BE-17 | Baixa | Erros só no console; 500 em HTML | Fase 3 |
+| BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Fase 3 |
+
 ---
 
 ## 9. Como rodar, testar e desenvolver
@@ -397,8 +431,8 @@ Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migra
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 97 testes da API, ~20 s
-pytest -q e2e        # 10 testes de interface, ~15 s
+pytest -q            # 108 testes da API, ~25 s
+pytest -q e2e        # 11 testes de interface, ~18 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py tests/ e2e/
 ```
 
@@ -445,7 +479,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py serv
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 97 passed).
+2. Rodar `pytest -q` (esperado: 108 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
