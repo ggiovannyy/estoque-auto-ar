@@ -427,6 +427,8 @@ def move(pid):
     mtype = d.get("type")
     if mtype not in ("in", "out", "adjust"):
         return err("Tipo de movimentação inválido.")
+    if mtype == "adjust" and g.user["role"] != "dono":  # a contagem define o saldo direto, sem venda nem compra
+        return err("Apenas o dono pode fazer a contagem.", 403)
     qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
     if qty is None:
         return err(f"Informe uma quantidade válida, até {MAX_QTY}. {QTY_HINT}")

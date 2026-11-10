@@ -352,7 +352,7 @@ async function openProduct(id) {
     <div class="bigqty"><b>${p.qty}</b><span class="muted">em estoque · mínimo ${p.min_effective}</span> ${stockTag(p)}</div>
     <div id="merr"></div>
     <div class="seg" role="group" aria-label="Tipo de movimentação">
-      <button class="out" data-type="out" aria-pressed="true">Saída</button><button class="in" data-type="in" aria-pressed="false">Entrada</button><button data-type="adjust" aria-pressed="false">Contagem</button></div>
+      <button class="out" data-type="out" aria-pressed="true">Saída</button><button class="in" data-type="in" aria-pressed="false">Entrada</button>${owner ? '<button data-type="adjust" aria-pressed="false">Contagem</button>' : ""}</div>
     <div class="stepper"><button data-step="-1" aria-label="Menos">−</button><input id="mqty" type="number" inputmode="numeric" min="1" value="1" aria-label="Quantidade"><button data-step="1" aria-label="Mais">+</button></div>
     <label class="f"><span id="nlabel">Observação (opcional)</span><input id="mnote" placeholder="Ex.: venda sem nota, OS 123"></label>
     <button class="btn block" id="mgo">Registrar saída</button>

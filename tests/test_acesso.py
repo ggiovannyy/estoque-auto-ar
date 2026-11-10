@@ -63,3 +63,12 @@ def test_primeiro_acesso_no_proprio_computador_funciona(app, ip):
 def test_depois_do_primeiro_acesso_o_login_funciona_pela_rede(app, owner):
     r = client_from(app, "192.168.0.50").post("/api/login", json={"username": "dono", "password": "senha-do-dono"})
     assert r.status_code == 200
+
+
+def test_so_o_dono_faz_contagem(owner, attendant):
+    p = new_product(owner, qty=5)
+    r = attendant.post(f"/api/products/{p['id']}/move", json={"type": "adjust", "qty": 0})
+    assert r.status_code == 403
+    assert "dono" in r.get_json()["error"]
+    assert owner.get(f"/api/products/{p['id']}").get_json()["qty"] == 5
+    assert owner.post(f"/api/products/{p['id']}/move", json={"type": "adjust", "qty": 3}).status_code == 200
