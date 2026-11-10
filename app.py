@@ -498,6 +498,73 @@ def move(pid):
     return jsonify(product_dict(fetch_product(pid=pid)))
 
 
+MAX_BATCH = 500  # peças por lote: um dia de contagem cabe com folga
+
+
+def read_batch_items(items, mtype):
+    """Itens do lote: ([(product_id, qty, expected)], erro)."""
+    if not isinstance(items, list) or not 0 < len(items) <= MAX_BATCH:
+        return None, f"Informe de 1 a {MAX_BATCH} peças."
+    out, seen = [], set()
+    for it in items:
+        it = it if isinstance(it, dict) else {}
+        pid = to_int(it.get("product_id"), minimum=1)
+        qty = to_int(it.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
+        seen_qty = it.get("expected") if mtype == "adjust" else None  # na contagem: o saldo que o dono via
+        expected = None if seen_qty is None else to_int(seen_qty, maximum=MAX_QTY)
+        if pid is None or qty is None or (seen_qty is not None and expected is None):
+            return None, f"Peça ou quantidade inválida no lote (até {MAX_QTY} por peça). {QTY_HINT}"
+        if pid in seen:
+            return None, "A mesma peça aparece duas vezes no lote."
+        seen.add(pid)
+        out.append((pid, qty, expected))
+    return out, None
+
+
+@app.post("/api/products/moves")
+@login_required()
+def move_batch():
+    """Leitura contínua: entradas ou contagens de várias peças numa transação só (tudo ou nada)."""
+    d = request.get_json(silent=True) or {}
+    mtype = d.get("type")
+    if mtype not in ("in", "adjust"):
+        return err("Tipo de movimentação inválido para o lote.")
+    if mtype == "adjust" and g.user["role"] != "dono":
+        return err("Apenas o dono pode fazer a contagem.", 403)
+    items, e = read_batch_items(d.get("items"), mtype)
+    if e:
+        return err(e)
+    request_id = d.get("request_id")  # cada item grava "<id>#<n>": o índice único de movements aceita um por linha
+    if request_id is not None and not (isinstance(request_id, str) and 0 < len(request_id) <= 60):
+        return err("Identificador do pedido inválido.")
+    ids = [pid for pid, _, _ in items]
+
+    def products():
+        return [product_dict(fetch_product(pid=pid)) for pid in ids]
+
+    db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
+    if request_id and db().execute("SELECT 1 FROM movements WHERE request_id=?", (f"{request_id}#0",)).fetchone():
+        db().rollback()  # reenvio de um lote já gravado
+        return jsonify(products=products())
+    rows = db().execute(f"SELECT id, name, qty FROM products WHERE active=1 AND id IN ({','.join('?' * len(ids))})",
+                        ids).fetchall()
+    found = {r["id"]: r for r in rows}
+    changed = [(found[pid], exp) for pid, _, exp in items if exp is not None and pid in found and found[pid]["qty"] != exp]
+    if changed:  # vendeu ou entrou peça enquanto se contava: a contagem apagaria isso
+        db().rollback()
+        names = "; ".join(f"{r['name']} (de {exp} para {r['qty']})" for r, exp in changed)
+        return jsonify(error=f"O estoque mudou enquanto você contava: {names}. Confira e salve de novo.",
+                       changed=[{"product_id": r["id"], "qty": r["qty"]} for r, _ in changed]), 409
+    note = clean(d.get("note"))
+    for n, (pid, qty, _) in enumerate(items):
+        _, e = record_move(pid, mtype, qty, note, g.user["id"], request_id and f"{request_id}#{n}")
+        if e:
+            db().rollback()
+            return err(f"{found[pid]['name']}: {e}" if pid in found else e)
+    db().commit()
+    return jsonify(products=products())
+
+
 # ---------------------------------------------------------------- reports
 @app.get("/api/summary")
 @login_required()
