@@ -48,6 +48,7 @@ def test_historico_registra_estoque_inicial_e_saldo(owner):
     moves = owner.get(f"/api/products/{p['id']}").get_json()["movements"]
     assert [(m["type"], m["delta"], m["balance"]) for m in moves] == [("out", -1, 4), ("in", 5, 5)]
     assert moves[0]["note"] == "venda sem nota"
+    assert "qty" not in moves[0]  # delta e balance bastam; qty tinha um sentido em adjust e outro no resto
 
 
 # ---------------------------------------------------------------- alerta de estoque baixo

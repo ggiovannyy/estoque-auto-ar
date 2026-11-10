@@ -348,9 +348,8 @@ def record_move(pid, mtype, qty, note, uid):
         delta = qty - cur
     new = cur + delta
     conn.execute("UPDATE products SET qty=? WHERE id=?", (new, pid))
-    conn.execute("""INSERT INTO movements(product_id,type,qty,delta,balance,note,user_id,created_at)
-                    VALUES (?,?,?,?,?,?,?,?)""", (pid, mtype, abs(delta) if mtype != "adjust" else qty,
-                                                    delta, new, note, uid, now()))
+    conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,created_at)
+                    VALUES (?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, now()))
     return new, None
 
 

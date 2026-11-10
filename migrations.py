@@ -79,9 +79,16 @@ def _v2_upc_a_to_ean_13(conn):
     conn.execute(f"UPDATE products SET barcode = '0' || barcode WHERE {_is_upc_a('barcode')}")
 
 
+def _v3_drop_movements_qty(conn):
+    """movements.qty era a quantidade digitada: em 'in' e 'out' repetia |delta|, em 'adjust' repetia
+    balance. Nada lia a coluna, e os dois sentidos confundiam. delta e balance já dizem tudo."""
+    conn.execute("ALTER TABLE movements DROP COLUMN qty")
+
+
 MIGRATIONS = [
     _v1_initial_schema,
     _v2_upc_a_to_ean_13,
+    _v3_drop_movements_qty,
 ]
 
 
