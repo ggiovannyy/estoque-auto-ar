@@ -90,6 +90,45 @@ def err(msg, code=400):
     return jsonify(error=msg), code
 
 
+class BadInput(Exception):
+    """Dados fora do formato (corpo que não é objeto, número no lugar de texto...): vira 400 com a mensagem."""
+
+
+@app.errorhandler(BadInput)
+def bad_input(e):
+    return err(str(e))
+
+
+def json_body():
+    """Corpo JSON da requisição como dicionário ({} se não houver corpo JSON)."""
+    d = request.get_json(silent=True)
+    if d is None:
+        return {}
+    if not isinstance(d, dict):
+        raise BadInput("Envie os dados como um objeto JSON.")
+    return d
+
+
+def text(d, key):
+    """Campo de texto sem espaços nas pontas; None se vier vazio ou faltar."""
+    v = d.get(key)
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise BadInput(f"O campo {key} precisa ser texto.")
+    return v.strip() or None
+
+
+def secret(d, key):
+    """Senha como foi digitada (espaços contam); "" se faltar."""
+    v = d.get(key)
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        raise BadInput(f"O campo {key} precisa ser texto.")
+    return v
+
+
 USER_FIELDS = ("id", "name", "username", "role", "active")
 
 
@@ -154,6 +193,8 @@ def normalize_barcode(v):
 
 
 def to_int(v, default=None, minimum=0, maximum=None):
+    if isinstance(v, bool):  # em Python, True == 1: "qty": true não pode virar 1
+        return default
     try:
         n = int(v)
     except (TypeError, ValueError):
@@ -208,8 +249,8 @@ def setup():
         return err("O sistema já foi configurado.", 403)
     if request.remote_addr not in LOCAL_ADDRESSES:
         return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
-    d = request.get_json(silent=True) or {}
-    name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
+    d = json_body()
+    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
     if not (name and username):
         return err("Informe nome e usuário.")
     if error := password_error(pw):
@@ -228,14 +269,14 @@ def setup():
 
 @app.post("/api/login")
 def login():
-    d = request.get_json(silent=True) or {}
-    username = (d.get("username") or "").strip().lower()
+    d = json_body()
+    username = (text(d, "username") or "").lower()
     ip, user_key = request.remote_addr, (request.remote_addr, username)
     wait = max(ip_throttle.retry_after(ip), user_throttle.retry_after(user_key))
     if wait:
         return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
     u = db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
-    if not u or not u["active"] or not check_password_hash(u["password_hash"], d.get("password") or ""):
+    if not u or not u["active"] or not check_password_hash(u["password_hash"], secret(d, "password")):
         ip_throttle.failure(ip)
         user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
@@ -263,7 +304,7 @@ def categories():
 @app.post("/api/categories")
 @login_required()
 def add_category():
-    name = clean((request.get_json(silent=True) or {}).get("name"))
+    name = text(json_body(), "name")
     if not name:
         return err("Informe o nome da categoria.")
     try:
@@ -344,19 +385,19 @@ def product_detail(pid):
 
 
 def read_product_fields(d):
-    name = clean(d.get("name"))
+    name = text(d, "name")
     if not name:
         return None, "Informe o nome da peça."
     min_qty, error = read_min(d["min_qty"]) if d.get("min_qty") not in (None, "") else (None, None)
     if error:
         return None, error
     return {
-        "barcode": normalize_barcode(d.get("barcode")),
-        "code": clean(d.get("code")),
+        "barcode": normalize_barcode(text(d, "barcode")),
+        "code": text(d, "code"),
         "name": name,
         "category_id": to_int(d.get("category_id")),
-        "ncm": clean(d.get("ncm")),
-        "brand": clean(d.get("brand")),
+        "ncm": text(d, "ncm"),
+        "brand": text(d, "brand"),
         "min_qty": min_qty,
     }, None
 
@@ -394,7 +435,7 @@ def record_move(pid, mtype, qty, note, uid, request_id=None):
 @app.post("/api/products")
 @login_required()
 def create_product():
-    d = request.get_json(silent=True) or {}
+    d = json_body()
     f, e = read_product_fields(d)
     if e:
         return err(e)
@@ -419,7 +460,7 @@ def create_product():
 @app.put("/api/products/<int:pid>")
 @login_required()
 def update_product(pid):
-    f, e = read_product_fields(request.get_json(silent=True) or {})
+    f, e = read_product_fields(json_body())
     if e:
         return err(e)
     try:
@@ -444,7 +485,7 @@ def delete_product(pid):
 @app.post("/api/products/<int:pid>/move")
 @login_required()
 def move(pid):
-    d = request.get_json(silent=True) or {}
+    d = json_body()
     mtype = d.get("type")
     if mtype not in ("in", "out", "adjust"):
         return err("Tipo de movimentação inválido.")
@@ -471,7 +512,7 @@ def move(pid):
             db().rollback()
             return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
                                  "Confira e salve de novo.", qty=row["qty"]), 409
-    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"], request_id)
+    new, e = record_move(pid, mtype, qty, text(d, "note"), g.user["id"], request_id)
     if e:
         db().rollback()
         return err(e)
@@ -522,7 +563,7 @@ def export_csv():
 @app.put("/api/settings")
 @login_required(owner=True)
 def set_settings():
-    n, error = read_min((request.get_json(silent=True) or {}).get("min_default"))
+    n, error = read_min(json_body().get("min_default"))
     if error:
         return err(error)
     db().execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('min_default', ?)", (str(n),))
@@ -562,8 +603,8 @@ def users():
 @app.post("/api/users")
 @login_required(owner=True)
 def add_user():
-    d = request.get_json(silent=True) or {}
-    name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
+    d = json_body()
+    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
     role = "dono" if d.get("role") == "dono" else "atendente"
     if not (name and username):
         return err("Informe nome e usuário.")
@@ -581,15 +622,18 @@ def add_user():
 @app.put("/api/users/<int:uid>")
 @login_required(owner=True)
 def edit_user(uid):
-    d = request.get_json(silent=True) or {}
-    deactivate = "active" in d and not d["active"]
+    d = json_body()
+    if "active" in d and not isinstance(d["active"], bool):
+        raise BadInput("O campo active precisa ser verdadeiro ou falso.")
+    deactivate = d.get("active") is False
+    new_pw = secret(d, "password")
     if deactivate and uid == g.user["id"]:
         return err("Você não pode desativar o próprio usuário.")
     pw_hash = None
-    if d.get("password"):
-        if error := password_error(d["password"]):
+    if new_pw:
+        if error := password_error(new_pw):
             return err(error)
-        pw_hash = generate_password_hash(d["password"])
+        pw_hash = generate_password_hash(new_pw)
     db().execute("BEGIN IMMEDIATE")  # dois donos mexendo ao mesmo tempo: um espera o outro
     if deactivate and not db().execute("SELECT 1 FROM users WHERE role='dono' AND active=1 AND id<>?",
                                        (uid,)).fetchone():
@@ -608,13 +652,14 @@ def edit_user(uid):
 @app.post("/api/password")
 @login_required()
 def change_password():
-    d = request.get_json(silent=True) or {}
+    d = json_body()
+    current, new_pw = secret(d, "current"), secret(d, "new")
     u = db().execute("SELECT password_hash FROM users WHERE id=?", (g.user["id"],)).fetchone()
-    if not check_password_hash(u["password_hash"], d.get("current") or ""):
+    if not check_password_hash(u["password_hash"], current):
         return err("Senha atual incorreta.")
-    if error := password_error(d.get("new")):
+    if error := password_error(new_pw):
         return err(error)
-    pw_hash = generate_password_hash(d["new"])
+    pw_hash = generate_password_hash(new_pw)
     db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, g.user["id"]))
     db().commit()
     session["pw"] = password_mark(pw_hash)  # este aparelho continua logado; os outros saem
