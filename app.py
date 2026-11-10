@@ -272,6 +272,16 @@ def state():
                    min_default=min_default())
 
 
+def read_new_user(d):
+    """Usuário novo (primeiro acesso ou cadastro pelo dono): ((nome, usuário, hash da senha), erro)."""
+    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
+    if not (name and username):
+        return None, "Informe nome e usuário."
+    if error := password_error(pw):
+        return None, error
+    return (name, username.lower(), generate_password_hash(pw)), None
+
+
 def users_exist():
     return db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
 
@@ -282,21 +292,16 @@ def setup():
         return err("O sistema já foi configurado.", 403)
     if request.remote_addr not in LOCAL_ADDRESSES:
         return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
-    d = json_body()
-    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
-    if not (name and username):
-        return err("Informe nome e usuário.")
-    if error := password_error(pw):
+    user, error = read_new_user(json_body())
+    if error:
         return err(error)
-    pw_hash = generate_password_hash(pw)
     db().execute("BEGIN IMMEDIATE")  # dois primeiros acessos ao mesmo tempo: o segundo espera e é recusado
     if users_exist():
         db().rollback()
         return err("O sistema já foi configurado.", 403)
-    cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
-                       (name, username.lower(), pw_hash))
+    cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')", user)
     db().commit()
-    start_session(cur.lastrowid, pw_hash)
+    start_session(cur.lastrowid, user[2])
     return jsonify(ok=True)
 
 
@@ -648,15 +653,12 @@ def users():
 @login_required(owner=True)
 def add_user():
     d = json_body()
-    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
-    role = "dono" if d.get("role") == "dono" else "atendente"
-    if not (name and username):
-        return err("Informe nome e usuário.")
-    if error := password_error(pw):
+    user, error = read_new_user(d)
+    if error:
         return err(error)
+    role = "dono" if d.get("role") == "dono" else "atendente"
     try:
-        db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)",
-                     (name, username.lower(), generate_password_hash(pw), role))
+        db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)", (*user, role))
         db().commit()
     except sqlite3.IntegrityError:
         return err("Esse usuário já existe.")
