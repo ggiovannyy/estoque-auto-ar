@@ -136,7 +136,7 @@ exato do sistema de notas.
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
 | `tests/` | ~1500 | 164 testes pytest da API |
-| `e2e/` | ~390 | 17 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `e2e/` | ~530 | 25 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -215,6 +215,10 @@ settings   (key, value)                             -- min_default = '2'
 - **Mais:** exportar CSV; mínimo padrão (dono); **Backup** (dono: última cópia, pasta, "Fazer backup agora" e aviso
   "Atrasado" com mais de 48 h); categorias; usuários (dono); trocar senha; sair.
 - **Folha da peça:** Saída, Entrada ou Contagem (Contagem só para o dono), com stepper, observação, últimas movimentações e edição de dados.
+- **Envio e foco** (`e2e/test_folhas.py`): os formulários travam o botão até a resposta (`onSubmit`), sem envio
+  duplo. A folha prende o Tab, tem nome para o leitor de tela e, ao fechar, devolve o foco a quem a abriu. A
+  movimentação manda `request_id` (reenvio depois de "Sem conexão" não grava duas vezes) e, na Contagem,
+  `expected` (409 se o saldo mudou enquanto se contava; a folha mostra o saldo novo).
 - **Design:** segue a logo do cliente (`static/logo.png`; `static/logo-sem-slogan.png` no cabeçalho do celular).
   - Cores: ação no azul da logo `#0062b1` (6,2:1 com texto branco), vermelho da logo `#e8333a` só como faixa
     decorativa (4,2:1, não serve para texto), saída/zerado em vermelho `#c62828`, alerta âmbar `#f5a000`, texto
@@ -463,7 +467,7 @@ para o porte.
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
 pytest -q            # 164 testes da API, ~45 s
-pytest -q e2e        # 17 testes de interface, ~30 s
+pytest -q e2e        # 25 testes de interface, ~35 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
