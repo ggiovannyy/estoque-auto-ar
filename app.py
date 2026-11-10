@@ -17,12 +17,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
 from migrations import migrate
+from paths import DATA, DB_PATH
 from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, password_mark
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
 os.makedirs(DATA, exist_ok=True)
-DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
 # Teto de quantidade: o leitor USB "digita" o codigo de barras e um Enter no campo em foco, inclusive no de quantidade.
