@@ -338,7 +338,7 @@ a97e956 Sistema de estoque Maxx Auto Ar
    movimentação, contagem com saldo visto, pasta na nuvem, instância única e corridas (BE-05, 06, 07, 09, 12, 13 e
    14, PR #17). A tela passa a usar `request_id` e `expected` nos PRs da sessão de frontend. Fase 3: validação dos
    dados recebidos, mensagem de categoria, enumeração de usuários, limites de tamanho, log em arquivo, refatorações
-   e `pip-audit` no CI (BE-10, 11, 15, 16, 17 e 18, PR da fase 3).
+   e `pip-audit` no CI (BE-10, 11, 15, 16, 17 e 18, PR #19).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -418,19 +418,19 @@ para o porte.
 | BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #16) |
 | BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #16) |
 | BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #16) |
-| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Corrigido na API (fase 2); falta a tela mandar `request_id` |
-| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Corrigido na API (fase 2); falta a tela mandar `expected` |
-| BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Aviso no início (fase 2) |
-| BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Corrigido (fase 2) |
-| BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Corrigido (fase 2) |
-| BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Corrigido (fase 2) |
-| BE-14 | Baixa | Corrida no primeiro acesso | Corrigido (fase 2) |
-| BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Corrigido (fase 3) |
-| BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Corrigido (fase 3) |
-| BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Corrigido (fase 3) |
-| BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Corrigido (fase 3) |
-| BE-17 | Baixa | Erros só no console; 500 em HTML | Corrigido (fase 3) |
-| BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Corrigido (fase 3): `read_new_user` e `inputs.py` |
+| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Corrigido na API (PR #17); falta a tela mandar `request_id` |
+| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Corrigido na API (PR #17); falta a tela mandar `expected` |
+| BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Aviso no início (PR #17) |
+| BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Corrigido (PR #17) |
+| BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Corrigido (PR #17) |
+| BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Corrigido (PR #17) |
+| BE-14 | Baixa | Corrida no primeiro acesso | Corrigido (PR #17) |
+| BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Corrigido (PR #19) |
+| BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Corrigido (PR #19) |
+| BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Corrigido (PR #19) |
+| BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Corrigido (PR #19) |
+| BE-17 | Baixa | Erros só no console; 500 em HTML | Corrigido (PR #19) |
+| BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Corrigido (PR #19): `read_new_user` e `inputs.py` |
 
 ---
 
