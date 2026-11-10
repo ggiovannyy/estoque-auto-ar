@@ -2,3 +2,9 @@
 -r requirements.txt
 pytest==9.2.0
 pyflakes==4.1.0
+
+# Testes de interface (pasta e2e). Depois de instalar: python -m playwright install chromium
+playwright==1.64.1
+greenlet==3.5.6         # indireta (playwright)
+pyee==14.0.0            # indireta (playwright)
+typing_extensions==4.16.0  # indireta (pyee)
