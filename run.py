@@ -9,7 +9,7 @@ import os
 import socket
 import sys
 
-from backup import BackupScheduler
+from backup import BackupScheduler, synced_folder
 from paths import DATA, DB_PATH
 from server import make_server
 from single_instance import lock_data_dir
@@ -41,6 +41,10 @@ def main():
         print("\n  O sistema já está aberto neste computador (outra janela ou o início automático).")
         print("  Use o que já está aberto; para reiniciar, feche-o antes.\n")
         return 1
+    if cloud := synced_folder(DATA):
+        print(f"  ATENÇÃO: a pasta de dados ({DATA}) está dentro de {cloud}, que é sincronizada com a nuvem.")
+        print("  O banco pode corromper com a sincronização e a chave de login vai para a nuvem.")
+        print("  Instale o sistema fora dela, num caminho curto (ex.: C:\\MaxxEstoque).")
     from app import app
     ips = lan_ips()
     use_https = not a.http
