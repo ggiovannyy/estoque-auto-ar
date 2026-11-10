@@ -152,6 +152,26 @@ def test_v2_para_e_avisa_se_o_upc_a_e_o_ean_13_ja_sao_pecas_diferentes(conn):
         "036000291452", "0036000291452"]
 
 
+def columns(conn, table):
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def test_v3_tira_movements_qty_sem_perder_o_historico(conn):
+    migrate(conn, MIGRATIONS[:2])
+    conn.execute("INSERT INTO products(barcode, name, qty, created_at) VALUES ('1', 'Filtro', 4, '2026-11-10 10:00:00')")
+    conn.executemany("""INSERT INTO movements(product_id, type, qty, delta, balance, created_at)
+                        VALUES (1, ?, ?, ?, ?, '2026-11-10 10:00:00')""",
+                     [("in", 7, 7, 7), ("out", 2, -2, 5), ("adjust", 4, -1, 4)])
+    conn.commit()
+
+    migrate(conn)
+
+    assert schema_version(conn) == len(MIGRATIONS)
+    assert "qty" not in columns(conn, "movements")
+    assert conn.execute("SELECT type, delta, balance FROM movements ORDER BY id").fetchall() == [
+        ("in", 7, 7), ("out", -2, 5), ("adjust", -1, 4)]
+
+
 def test_init_db_migra_o_banco_do_sistema(tmp_path, monkeypatch):
     path = tmp_path / "estoque.db"
     legacy = sqlite3.connect(path)
