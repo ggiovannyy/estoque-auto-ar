@@ -4,6 +4,7 @@ As copias vao para uma pasta que o proprio Windows sincroniza com a nuvem
 (OneDrive, detectado sozinho, ou Google Drive / outra pasta via MAXX_BACKUP_DIR).
 Assim o sistema nao precisa guardar senha nem chave de nenhum servico.
 """
+import logging
 import os
 import sqlite3
 import threading
@@ -16,6 +17,7 @@ FILE_SUFFIX = ".db"
 TIMESTAMP_FORMAT = "%Y-%m-%d_%H%M%S"
 ONEDRIVE_VARS = ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")  # definidas pelo Windows
 DEFAULT_KEEP = 30  # uma copia por dia: um mes de historico
+log = logging.getLogger("backup")
 SYNCED_FOLDER_NAMES = ("Google Drive", "Meu Drive", "My Drive", "Dropbox")
 
 
@@ -119,9 +121,9 @@ class BackupScheduler:
             path = make_backup(self.db_path, self.dest_dir, now=now)
             prune_backups(self.dest_dir, self.keep)
         except (OSError, sqlite3.Error) as e:
-            print(f"  Falha no backup em {self.dest_dir}: {e}")
+            log.error("Falha no backup em %s: %s", self.dest_dir, e)
             return None
-        print(f"  Backup salvo: {path}")
+        log.info("Backup salvo: %s", path)
         return path
 
     def start(self):

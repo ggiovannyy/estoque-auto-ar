@@ -13,7 +13,7 @@ from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
-from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.exceptions import HTTPException, InternalServerError, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
@@ -107,6 +107,23 @@ def bad_input(e):
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_):
     return err("Os dados enviados são grandes demais.", 413)
+
+
+@app.errorhandler(InternalServerError)
+def internal_error(_):
+    # O Flask já registrou o traceback no log; quem usa o sistema vê só uma mensagem genérica.
+    return err("Erro inesperado no servidor. Tente de novo; se continuar, avise o responsável.", 500)
+
+
+API_HTTP_ERRORS = {404: "Endereço não encontrado.", 405: "Método não permitido."}
+
+
+@app.errorhandler(HTTPException)
+def http_error(e):
+    """Na API, os erros do próprio Flask (rota inexistente, método errado...) também respondem em JSON."""
+    if request.path.startswith("/api/"):
+        return err(API_HTTP_ERRORS.get(e.code, "Requisição inválida."), e.code)
+    return e
 
 
 MAX_TEXT = 200  # nome, código, marca, usuário, senha...
