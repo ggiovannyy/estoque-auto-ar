@@ -3,6 +3,7 @@
 Backend Flask + SQLite. Toda a interface fica em /static (mobile-first).
 """
 import csv
+import hmac
 import io
 import math
 import os
@@ -16,7 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
 from migrations import migrate
-from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
+from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, password_mark
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
@@ -91,12 +92,24 @@ def err(msg, code=400):
     return jsonify(error=msg), code
 
 
+USER_FIELDS = ("id", "name", "username", "role", "active")
+
+
+def start_session(user_id, password_hash):
+    session.clear()
+    session.permanent = True
+    session["uid"] = user_id
+    session["pw"] = password_mark(password_hash)
+
+
 def current_user():
     uid = session.get("uid")
     if not uid:
         return None
-    u = db().execute("SELECT id,name,username,role,active FROM users WHERE id=?", (uid,)).fetchone()
-    return u if u and u["active"] else None
+    u = db().execute("SELECT id,name,username,role,active,password_hash FROM users WHERE id=?", (uid,)).fetchone()
+    if not u or not u["active"] or not hmac.compare_digest(session.get("pw", ""), password_mark(u["password_hash"])):
+        return None
+    return {k: u[k] for k in USER_FIELDS}
 
 
 def login_required(owner=False):
@@ -183,7 +196,7 @@ def state():
     u = current_user()
     return jsonify(setup_needed=users == 0,
                    setup_here=request.remote_addr in LOCAL_ADDRESSES,
-                   user=dict(u) if u else None,
+                   user=u,
                    min_default=min_default())
 
 
@@ -199,11 +212,11 @@ def setup():
         return err("Informe nome e usuário.")
     if error := password_error(pw):
         return err(error)
+    pw_hash = generate_password_hash(pw)
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
-                       (name, username.lower(), generate_password_hash(pw)))
+                       (name, username.lower(), pw_hash))
     db().commit()
-    session.permanent = True
-    session["uid"] = cur.lastrowid
+    start_session(cur.lastrowid, pw_hash)
     return jsonify(ok=True)
 
 
@@ -221,8 +234,7 @@ def login():
         user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
     user_throttle.success(user_key)
-    session.permanent = True
-    session["uid"] = u["id"]
+    start_session(u["id"], u["password_hash"])
     return jsonify(ok=True)
 
 
@@ -551,7 +563,10 @@ def edit_user(uid):
     if d.get("password"):
         if error := password_error(d["password"]):
             return err(error)
-        db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["password"]), uid))
+        pw_hash = generate_password_hash(d["password"])
+        db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, uid))
+        if uid == g.user["id"]:
+            session["pw"] = password_mark(pw_hash)  # quem redefiniu a propria senha continua logado aqui
     db().commit()
     return jsonify(ok=True)
 
@@ -565,8 +580,10 @@ def change_password():
         return err("Senha atual incorreta.")
     if error := password_error(d.get("new")):
         return err(error)
-    db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["new"]), g.user["id"]))
+    pw_hash = generate_password_hash(d["new"])
+    db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, g.user["id"]))
     db().commit()
+    session["pw"] = password_mark(pw_hash)  # este aparelho continua logado; os outros saem
     return jsonify(ok=True)
 
 
