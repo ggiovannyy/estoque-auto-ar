@@ -361,7 +361,7 @@ def read_product_fields(d):
     }, None
 
 
-def record_move(pid, mtype, qty, note, uid):
+def record_move(pid, mtype, qty, note, uid, request_id=None):
     """Aplica uma movimentacao. Retorna (saldo, erro).
 
     Precisa rodar dentro de uma transacao de escrita ja aberta (BEGIN IMMEDIATE,
@@ -386,8 +386,8 @@ def record_move(pid, mtype, qty, note, uid):
     if new > MAX_QTY:
         return None, f"O estoque passaria de {MAX_QTY} unidades. {QTY_HINT}"
     conn.execute("UPDATE products SET qty=? WHERE id=?", (new, pid))
-    conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,created_at)
-                    VALUES (?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, now()))
+    conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,request_id,created_at)
+                    VALUES (?,?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, request_id, now()))
     return new, None
 
 
@@ -453,19 +453,25 @@ def move(pid):
     qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
     if qty is None:
         return err(f"Informe uma quantidade válida, até {MAX_QTY}. {QTY_HINT}")
+    request_id = d.get("request_id")  # gerado pela tela: o mesmo pedido reenviado não grava de novo
+    if request_id is not None and not (isinstance(request_id, str) and 0 < len(request_id) <= 64):
+        return err("Identificador do pedido inválido.")
     expected = None  # na contagem: o saldo que o dono via ao contar
     if mtype == "adjust" and d.get("expected") is not None:
         expected = to_int(d["expected"], maximum=MAX_QTY)
         if expected is None:
             return err("Saldo anterior inválido.")
     db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
+    if request_id and db().execute("SELECT 1 FROM movements WHERE request_id=?", (request_id,)).fetchone():
+        db().rollback()  # reenvio de um pedido já gravado: responde com a peça como está
+        return jsonify(product_dict(fetch_product(pid=pid)))
     if expected is not None:
         row = db().execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
         if row and row["qty"] != expected:  # vendeu ou entrou peça enquanto se contava: a contagem apagaria isso
             db().rollback()
             return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
                                  "Confira e salve de novo.", qty=row["qty"]), 409
-    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"])
+    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"], request_id)
     if e:
         db().rollback()
         return err(e)

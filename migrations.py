@@ -85,10 +85,18 @@ def _v3_drop_movements_qty(conn):
     conn.execute("ALTER TABLE movements DROP COLUMN qty")
 
 
+def _v4_movements_request_id(conn):
+    """Identificador do pedido de movimentação, gerado pela tela. Se a resposta se perde (Wi-Fi ruim) e o atendente
+    toca de novo, o servidor reconhece o reenvio e não baixa duas vezes. Único; vários NULL continuam valendo."""
+    conn.execute("ALTER TABLE movements ADD COLUMN request_id TEXT")
+    conn.execute("CREATE UNIQUE INDEX idx_mov_request ON movements(request_id)")
+
+
 MIGRATIONS = [
     _v1_initial_schema,
     _v2_upc_a_to_ean_13,
     _v3_drop_movements_qty,
+    _v4_movements_request_id,
 ]
 
 
