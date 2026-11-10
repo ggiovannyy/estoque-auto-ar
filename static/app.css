@@ -5,7 +5,8 @@
   --paper: #ffffff;
   --line: #d6dee6;
   --text: #11303f;
-  --muted: #5d7886;
+  --muted: #506b79;      /* texto auxiliar: >= 4,5:1 em todos os fundos claros */
+  --field: #7a909c;      /* borda dos campos: >= 3:1 (componente), as bordas dos cartoes (--line) sao decorativas */
   --blue: #0062b1;       /* azul da logo: acao principal (6,2:1 com texto branco) */
   --blue-d: #004f8f;
   --blue-bg: #e6f0f9;
@@ -78,7 +79,7 @@ nav.tabs .dot { position: absolute; top: 8px; left: calc(50% + 6px); min-width: 
 .btn[disabled] { opacity: .5; }
 label.f { display: block; margin-bottom: 12px; }
 label.f > span, .flabel { display: block; font-weight: 600; font-size: .86rem; margin-bottom: 4px; color: var(--ink-2); }
-input, select, textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; min-height: 46px; }
+input, select, textarea { width: 100%; padding: 11px 12px; border: 1.5px solid var(--field); border-radius: 10px; background: #fff; min-height: 46px; }
 input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgb(0 98 177 / .18); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
