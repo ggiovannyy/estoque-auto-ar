@@ -16,6 +16,7 @@ FILE_SUFFIX = ".db"
 TIMESTAMP_FORMAT = "%Y-%m-%d_%H%M%S"
 ONEDRIVE_VARS = ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")  # definidas pelo Windows
 DEFAULT_KEEP = 30  # uma copia por dia: um mes de historico
+SYNCED_FOLDER_NAMES = ("Google Drive", "Meu Drive", "My Drive", "Dropbox")
 
 
 def default_backup_dir(data_dir, env=os.environ):
@@ -27,6 +28,21 @@ def default_backup_dir(data_dir, env=os.environ):
         if onedrive and Path(onedrive).is_dir():
             return Path(onedrive) / CLOUD_FOLDER_NAME
     return Path(data_dir) / "backups"
+
+
+def synced_folder(path, env=os.environ):
+    """Pasta sincronizada com a nuvem (OneDrive, Google Drive, Dropbox) que contem `path`, ou None.
+
+    O lugar do backup e numa pasta assim; o do banco em uso, nao: a sincronizacao mexe nos arquivos -wal/-shm
+    enquanto o SQLite grava, e a chave da sessao (secret.key) iria para a nuvem.
+    """
+    path = Path(path).absolute()
+    for var in ONEDRIVE_VARS:
+        if env.get(var):
+            root = Path(env[var]).absolute()
+            if path == root or root in path.parents:
+                return root
+    return next((p for p in (path, *path.parents) if p.name in SYNCED_FOLDER_NAMES), None)
 
 
 def make_backup(db_path, dest_dir, now=None):

@@ -186,3 +186,22 @@ def test_init_db_migra_o_banco_do_sistema(tmp_path, monkeypatch):
     assert c.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert c.execute("SELECT qty FROM products").fetchone()[0] == 7
     c.close()
+
+
+def test_v4_cria_o_identificador_unico_do_pedido(conn):
+    migrate(conn, MIGRATIONS[:3])
+    conn.execute("INSERT INTO products(barcode, name, qty, created_at) VALUES ('1', 'Filtro', 4, '2026-11-10 10:00:00')")
+    conn.execute("""INSERT INTO movements(product_id, type, delta, balance, created_at)
+                    VALUES (1, 'in', 4, 4, '2026-11-10 10:00:00')""")
+    conn.commit()
+
+    migrate(conn)
+
+    assert schema_version(conn) == len(MIGRATIONS)
+    assert conn.execute("SELECT request_id FROM movements").fetchall() == [(None,)]
+    insert = "INSERT INTO movements(product_id, type, delta, balance, request_id, created_at) VALUES (1, 'in', 1, 5, ?, 'x')"
+    conn.execute(insert, ("pedido-1",))
+    conn.execute(insert, (None,))
+    conn.execute(insert, (None,))                    # vários movimentos sem identificador continuam valendo
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(insert, ("pedido-1",))

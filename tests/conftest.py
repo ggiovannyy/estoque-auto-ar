@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import sys
 import tempfile
 
@@ -59,3 +60,37 @@ def new_product(client, **fields):
 
 def move(client, pid, type_, qty, **extra):
     return client.post(f"/api/products/{pid}/move", json={"type": type_, "qty": qty, **extra})
+
+
+class _InterleavedConnection:
+    """Conexão da rota que, antes do comando que começa com `prefix`, deixa "outro usuário" gravar."""
+
+    def __init__(self, conn, prefix, other_write, log):
+        self._conn, self._prefix, self._other_write, self._log = conn, prefix, other_write, log
+
+    def execute(self, sql, *args):
+        if sql.lstrip().startswith(self._prefix) and not self._log:
+            other = sqlite3.connect(appmod.DB_PATH, timeout=0)  # o outro usuário não espera: ou grava já, ou não
+            try:
+                self._other_write(other)
+                other.commit()
+                self._log.append("gravou no meio")
+            except sqlite3.OperationalError:
+                self._log.append("barrado")  # a rota já tinha a trava de escrita
+            finally:
+                other.close()
+        return self._conn.execute(sql, *args)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+@pytest.fixture
+def interleave(monkeypatch):
+    """interleave(prefix, other_write) faz `other_write(conexao)` rodar logo antes do comando da rota que começa com
+    `prefix`, como um segundo usuário. Devolve a lista com o que aconteceu ("gravou no meio" ou "barrado")."""
+    def arm(prefix, other_write):
+        log, original = [], appmod.db
+        monkeypatch.setattr(appmod, "db", lambda: _InterleavedConnection(original(), prefix, other_write, log))
+        return log
+    return arm

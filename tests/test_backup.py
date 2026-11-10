@@ -69,6 +69,24 @@ def test_usa_o_onedrive_quando_existe(tmp_path):
     assert backup.default_backup_dir(tmp_path / "data", env) == tmp_path / "OneDrive" / backup.CLOUD_FOLDER_NAME
 
 
+# Pasta de dados dentro de pasta sincronizada: o banco em WAL pode corromper e a chave da sessão vai para a nuvem.
+def test_pasta_de_dados_dentro_do_onedrive_e_detectada(tmp_path):
+    env = {"OneDrive": str(tmp_path / "OneDrive")}
+    assert backup.synced_folder(tmp_path / "OneDrive" / "Documentos" / "estoque" / "data", env) == tmp_path / "OneDrive"
+
+
+@pytest.mark.parametrize("parts", [("Google Drive", "Meu Drive"), ("Meu Drive",), ("My Drive",), ("Dropbox",)])
+def test_pasta_de_dados_dentro_de_outras_nuvens_e_detectada(tmp_path, parts):
+    root = tmp_path.joinpath(*parts)
+    assert backup.synced_folder(root / "estoque" / "data", {}) is not None
+
+
+def test_pasta_de_dados_fora_da_nuvem_nao_e_detectada(tmp_path):
+    env = {"OneDrive": str(tmp_path / "OneDrive")}
+    assert backup.synced_folder(tmp_path / "MaxxEstoque" / "data", env) is None
+    assert backup.synced_folder(tmp_path / "OneDriveVelho" / "data", env) is None
+
+
 def test_sem_nuvem_guarda_dentro_da_pasta_de_dados(tmp_path):
     env = {"OneDrive": str(tmp_path / "nao-existe")}
     assert backup.default_backup_dir(tmp_path / "data", env) == tmp_path / "data" / "backups"

@@ -195,3 +195,32 @@ def test_minimo_invalido_ou_acima_do_teto_e_recusado(owner):
         assert "Mínimo" in r.get_json()["error"]
         assert owner.put("/api/settings", json={"min_default": bad}).status_code == 400
     assert owner.get("/api/products").get_json() == []
+
+
+# Contagem com o saldo visto: o que foi vendido enquanto o dono contava não pode sumir do estoque.
+def test_contagem_e_recusada_se_o_estoque_mudou_enquanto_se_contava(owner):
+    p = new_product(owner, qty=5)                 # o dono abre a peça e vê 5
+    assert move(owner, p["id"], "out", 2).status_code == 200   # o atendente vende 2 nesse meio-tempo
+    r = move(owner, p["id"], "adjust", 5, expected=5)
+    assert r.status_code == 409
+    assert "de 5 para 3" in r.get_json()["error"]
+    assert r.get_json()["qty"] == 3
+    assert qty_of(owner, p["id"]) == 3
+
+
+def test_contagem_com_o_saldo_certo_vale(owner):
+    p = new_product(owner, qty=5)
+    assert move(owner, p["id"], "adjust", 7, expected=5).status_code == 200
+    assert qty_of(owner, p["id"]) == 7
+
+
+def test_contagem_sem_saldo_visto_continua_valendo(owner):
+    p = new_product(owner, qty=5)
+    assert move(owner, p["id"], "adjust", 1).status_code == 200
+    assert qty_of(owner, p["id"]) == 1
+
+
+def test_saldo_visto_invalido_e_recusado(owner):
+    p = new_product(owner, qty=5)
+    assert move(owner, p["id"], "adjust", 1, expected="abc").status_code == 400
+    assert qty_of(owner, p["id"]) == 5

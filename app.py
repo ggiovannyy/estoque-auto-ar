@@ -17,12 +17,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
 from migrations import migrate
+from paths import DATA, DB_PATH
 from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, password_mark
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
 os.makedirs(DATA, exist_ok=True)
-DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
 # Teto de quantidade: o leitor USB "digita" o codigo de barras e um Enter no campo em foco, inclusive no de quantidade.
@@ -200,9 +198,13 @@ def state():
                    min_default=min_default())
 
 
+def users_exist():
+    return db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+
+
 @app.post("/api/setup")
 def setup():
-    if db().execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+    if users_exist():
         return err("O sistema já foi configurado.", 403)
     if request.remote_addr not in LOCAL_ADDRESSES:
         return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
@@ -213,6 +215,10 @@ def setup():
     if error := password_error(pw):
         return err(error)
     pw_hash = generate_password_hash(pw)
+    db().execute("BEGIN IMMEDIATE")  # dois primeiros acessos ao mesmo tempo: o segundo espera e é recusado
+    if users_exist():
+        db().rollback()
+        return err("O sistema já foi configurado.", 403)
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
                        (name, username.lower(), pw_hash))
     db().commit()
@@ -271,10 +277,13 @@ def add_category():
 @app.delete("/api/categories/<int:cid>")
 @login_required(owner=True)
 def del_category(cid):
-    if db().execute("SELECT 1 FROM products WHERE category_id=? AND active=1", (cid,)).fetchone():
+    db().execute("BEGIN IMMEDIATE")  # ninguém cadastra peça nessa categoria enquanto ela é excluída
+    db().execute("UPDATE products SET category_id=NULL WHERE category_id=? AND active=0", (cid,))
+    try:
+        db().execute("DELETE FROM categories WHERE id=?", (cid,))
+    except sqlite3.IntegrityError:  # chave estrangeira: ainda há peça ativa nela
+        db().rollback()
         return err("Há peças nessa categoria. Mova-as antes de excluir.")
-    db().execute("UPDATE products SET category_id=NULL WHERE category_id=?", (cid,))
-    db().execute("DELETE FROM categories WHERE id=?", (cid,))
     db().commit()
     return jsonify(ok=True)
 
@@ -352,7 +361,7 @@ def read_product_fields(d):
     }, None
 
 
-def record_move(pid, mtype, qty, note, uid):
+def record_move(pid, mtype, qty, note, uid, request_id=None):
     """Aplica uma movimentacao. Retorna (saldo, erro).
 
     Precisa rodar dentro de uma transacao de escrita ja aberta (BEGIN IMMEDIATE,
@@ -377,8 +386,8 @@ def record_move(pid, mtype, qty, note, uid):
     if new > MAX_QTY:
         return None, f"O estoque passaria de {MAX_QTY} unidades. {QTY_HINT}"
     conn.execute("UPDATE products SET qty=? WHERE id=?", (new, pid))
-    conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,created_at)
-                    VALUES (?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, now()))
+    conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,request_id,created_at)
+                    VALUES (?,?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, request_id, now()))
     return new, None
 
 
@@ -444,8 +453,25 @@ def move(pid):
     qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
     if qty is None:
         return err(f"Informe uma quantidade válida, até {MAX_QTY}. {QTY_HINT}")
+    request_id = d.get("request_id")  # gerado pela tela: o mesmo pedido reenviado não grava de novo
+    if request_id is not None and not (isinstance(request_id, str) and 0 < len(request_id) <= 64):
+        return err("Identificador do pedido inválido.")
+    expected = None  # na contagem: o saldo que o dono via ao contar
+    if mtype == "adjust" and d.get("expected") is not None:
+        expected = to_int(d["expected"], maximum=MAX_QTY)
+        if expected is None:
+            return err("Saldo anterior inválido.")
     db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
-    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"])
+    if request_id and db().execute("SELECT 1 FROM movements WHERE request_id=?", (request_id,)).fetchone():
+        db().rollback()  # reenvio de um pedido já gravado: responde com a peça como está
+        return jsonify(product_dict(fetch_product(pid=pid)))
+    if expected is not None:
+        row = db().execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
+        if row and row["qty"] != expected:  # vendeu ou entrou peça enquanto se contava: a contagem apagaria isso
+            db().rollback()
+            return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
+                                 "Confira e salve de novo.", qty=row["qty"]), 409
+    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"], request_id)
     if e:
         db().rollback()
         return err(e)
@@ -556,14 +582,22 @@ def add_user():
 @login_required(owner=True)
 def edit_user(uid):
     d = request.get_json(silent=True) or {}
-    if "active" in d:
-        if uid == g.user["id"] and not d["active"]:
-            return err("Você não pode desativar o próprio usuário.")
-        db().execute("UPDATE users SET active=? WHERE id=?", (1 if d["active"] else 0, uid))
+    deactivate = "active" in d and not d["active"]
+    if deactivate and uid == g.user["id"]:
+        return err("Você não pode desativar o próprio usuário.")
+    pw_hash = None
     if d.get("password"):
         if error := password_error(d["password"]):
             return err(error)
         pw_hash = generate_password_hash(d["password"])
+    db().execute("BEGIN IMMEDIATE")  # dois donos mexendo ao mesmo tempo: um espera o outro
+    if deactivate and not db().execute("SELECT 1 FROM users WHERE role='dono' AND active=1 AND id<>?",
+                                       (uid,)).fetchone():
+        db().rollback()
+        return err("O sistema precisa de ao menos um dono ativo.")
+    if "active" in d:
+        db().execute("UPDATE users SET active=? WHERE id=?", (0 if deactivate else 1, uid))
+    if pw_hash:
         db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, uid))
         if uid == g.user["id"]:
             session["pw"] = password_mark(pw_hash)  # quem redefiniu a propria senha continua logado aqui
