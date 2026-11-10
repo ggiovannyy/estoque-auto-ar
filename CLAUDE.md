@@ -26,7 +26,8 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `migrations.py`: esquema do banco em passos numerados (`MIGRATIONS`), versão em `PRAGMA user_version`.
   - `security.py`: senha, limitador de login, CSV e cabeçalhos.
   - `backup.py`: backup diário para a pasta do OneDrive ou do Google Drive.
-  - `run.py`: certificado https autoassinado, backup e servidor.
+  - `tls.py`: certificado https autoassinado nas regras da Apple (senão o iPhone recusa sem opção de continuar).
+  - `run.py`: garante o certificado, inicia o backup e o servidor.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
   Mudança de interface ganha teste em `e2e/`.
@@ -40,9 +41,9 @@ arquitetura, decisões, histórico e a lista de pendências.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
-pytest -q                                   # 87 testes da API (pasta tests/)
+pytest -q                                   # 95 testes da API (pasta tests/)
 pytest -q e2e                               # 10 testes de interface no navegador (pasta e2e/)
-python -m pyflakes app.py run.py backup.py security.py migrations.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```

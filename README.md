@@ -18,7 +18,8 @@ em `https://localhost:8443` — assim ninguém no Wi-Fi se cadastra como dono an
 cadastre os atendentes; eles entram de qualquer aparelho da rede.
 
 > **Câmera no celular:** navegadores só liberam a câmera em conexão segura (https). O sistema gera um certificado próprio;
-> na primeira vez o celular avisa "conexão não segura". Toque em **Avançado → Continuar** (uma vez só).
+> na primeira vez o celular avisa "conexão não segura". No Android, toque em **Avançado → Continuar**; no iPhone, em
+> **Mostrar detalhes → visitar este site** e confirme.
 
 **Abrir sozinho com o Windows:** dê dois cliques em `instalar-inicio-automatico.bat` (uma vez só). O sistema passa a
 abrir minimizado sempre que o computador ligar. Para desfazer: `remover-inicio-automatico.bat`.
