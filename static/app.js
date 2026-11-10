@@ -34,7 +34,7 @@ async function api(path, opts = {}) {
   try { r = await fetch("/api" + path, o); } catch { throw new Error("Sem conexão com o servidor."); }
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && S.user) { S.user = null; render(); }
-  if (!r.ok) throw new Error(data.error || "Erro inesperado.");
+  if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status });
   return data;
 }
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [, m, dd] = d.split("-"); return `${dd}/${m} ${t.slice(0, 5)}`; };
@@ -230,7 +230,7 @@ async function startCamera() {
 async function handleCode(code) {
   try { const p = await api("/products/barcode/" + encodeURIComponent(code)); openProduct(p.id); }
   catch (e) {
-    if (e.message.includes("não cadastrada")) { toast("Peça nova — preencha o cadastro."); openForm({ barcode: code }); }
+    if (e.status === 404) { toast("Peça nova — preencha o cadastro."); openForm({ barcode: code }); }
     else toast(e.message, true);
   }
 }
