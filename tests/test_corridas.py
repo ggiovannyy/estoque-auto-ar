@@ -60,3 +60,10 @@ def test_dono_nao_desativa_o_unico_outro_dono_ativo_se_ele_mesmo_estiver_inativo
     socio_id = one("SELECT id FROM users WHERE username='socio'")[0]
     assert owner.put(f"/api/users/{socio_id}", json={"active": False}).status_code == 200
     assert owner.put(f"/api/users/{socio_id}", json={"active": True}).status_code == 200
+
+
+def test_primeiro_acesso_simultaneo_cria_um_dono_so(app, interleave):
+    log = interleave("INSERT INTO users", lambda other: other.execute(
+        "INSERT INTO users(name, username, password_hash, role) VALUES ('Outro', 'outro', 'x', 'dono')"))
+    app.test_client().post("/api/setup", json={"name": "Dono", "username": "dono", "password": "senha-do-dono"})
+    assert one("SELECT COUNT(*) FROM users")[0] == 1, f"dois donos no primeiro acesso ({log})"

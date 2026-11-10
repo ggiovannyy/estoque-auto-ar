@@ -200,9 +200,13 @@ def state():
                    min_default=min_default())
 
 
+def users_exist():
+    return db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+
+
 @app.post("/api/setup")
 def setup():
-    if db().execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+    if users_exist():
         return err("O sistema já foi configurado.", 403)
     if request.remote_addr not in LOCAL_ADDRESSES:
         return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
@@ -213,6 +217,10 @@ def setup():
     if error := password_error(pw):
         return err(error)
     pw_hash = generate_password_hash(pw)
+    db().execute("BEGIN IMMEDIATE")  # dois primeiros acessos ao mesmo tempo: o segundo espera e é recusado
+    if users_exist():
+        db().rollback()
+        return err("O sistema já foi configurado.", 403)
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
                        (name, username.lower(), pw_hash))
     db().commit()
