@@ -29,3 +29,34 @@ def test_filtro_de_categoria_continua_marcando_o_escolhido(page, api):
         chip.click()
     expect(page.locator(f'[data-cat="{cat["id"]}"]')).to_have_attribute("aria-pressed", "true")
     expect(page.locator('[data-cat="0"]')).to_have_attribute("aria-pressed", "false")
+
+
+def test_biblioteca_da_camera_nao_carrega_na_abertura(page):
+    loaded = []
+    page.on("request", lambda r: loaded.append(r.url) if "html5-qrcode" in r.url else None)
+    page.goto("/")
+    page.locator('nav.tabs [data-tab="scan"]').click()
+    expect(page.locator("#code")).to_be_visible()
+    assert not loaded, "a biblioteca da câmera (375 KB) carregou sem a câmera ser usada"
+
+
+def test_camera_carrega_a_biblioteca_e_abre_no_primeiro_toque(playwright, base_url):
+    """Câmera falsa do Chromium: a biblioteca carrega sob demanda e o vídeo aparece, sem erro nem bloqueio da CSP."""
+    from conftest import OWNER
+    browser = playwright.chromium.launch(args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
+    ctx = browser.new_context(base_url=base_url, viewport={"width": 390, "height": 844}, permissions=["camera"])
+    assert ctx.request.post("/api/login", data={"username": OWNER["username"], "password": OWNER["password"]}).ok
+    page = ctx.new_page()
+    problems = []
+    page.on("pageerror", lambda e: problems.append(str(e)))
+    page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+    page.goto("/")
+    page.locator('nav.tabs [data-tab="scan"]').click()
+    with page.expect_request("**/html5-qrcode.min.js"):
+        page.get_by_role("button", name="Usar a câmera do celular").click()
+    expect(page.locator("#reader video")).to_be_visible(timeout=10000)
+    expect(page.get_by_role("button", name="Fechar câmera")).to_be_visible()
+    page.get_by_role("button", name="Fechar câmera").click()
+    expect(page.locator("#reader")).to_be_hidden()
+    browser.close()
+    assert not problems, problems

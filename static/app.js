@@ -297,7 +297,17 @@ async function renderUsers() {
 }
 
 /* ---------------------------------------------------------------- scan */
-let scanner = null;
+let scanner = null, cameraLib = null;
+/* A biblioteca da câmera (375 KB) só carrega no primeiro uso: quem usa o leitor USB nunca a baixa. */
+function loadCameraLib() {
+  cameraLib ||= new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = "/static/vendor/html5-qrcode.min.js"; s.onload = ok;
+    s.onerror = () => { cameraLib = null; s.remove(); fail(new Error("Não consegui carregar a câmera. Tente de novo.")); };
+    document.head.append(s);
+  });
+  return cameraLib;
+}
 async function stopCamera() {
   if (!scanner) return;
   try { await scanner.stop(); scanner.clear(); } catch {}
@@ -322,10 +332,14 @@ function scanView() {
 async function startCamera() {
   const box = $("#reader"), btn = $("#cam");
   if (scanner) { await stopCamera(); box.hidden = true; btn.textContent = "Usar a câmera do celular"; return; }
+  if (!box.hidden) return; // ainda abrindo (carregando a biblioteca ou pedindo permissão): ignora o segundo toque
   if (!navigator.mediaDevices || !window.isSecureContext) {
     toast("A câmera só funciona em conexão segura (https). Veja o passo a passo no README.", true); return;
   }
   box.hidden = false; btn.textContent = "Fechar câmera";
+  try { await loadCameraLib(); } catch (e) {
+    box.hidden = true; btn.textContent = "Usar a câmera do celular"; toast(e.message, true); return;
+  }
   const F = Html5QrcodeSupportedFormats;
   scanner = new Html5Qrcode("reader", {
     formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE],
