@@ -65,3 +65,28 @@ def test_ativar_ou_desativar_exige_verdadeiro_ou_falso(owner, attendant, bad):
 def test_quantidade_verdadeiro_ou_falso_e_recusada(owner, ids):
     pid, _ = ids
     assert owner.post(f"/api/products/{pid}/move", json={"type": "in", "qty": True}).status_code == 400
+
+
+# Tamanhos: nada de corpo gigante (inclusive sem login) nem campo de texto sem fim.
+def test_corpo_grande_demais_e_recusado_sem_login(app):
+    r = app.test_client().post("/api/login", json={"username": "x" * 100_000, "password": "y"})
+    assert r.status_code == 413
+    assert r.get_json()["error"]
+
+
+@pytest.mark.parametrize("field, size", [("name", 201), ("code", 201), ("brand", 201), ("ncm", 201)])
+def test_campo_longo_demais_e_recusado(owner, field, size):
+    body = {"name": "Peça", field: "x" * size}
+    r = owner.post("/api/products", json=body)
+    assert r.status_code == 400 and "200" in r.get_json()["error"]
+
+
+def test_observacao_aceita_ate_500_caracteres(owner, ids):
+    pid, _ = ids
+    assert owner.post(f"/api/products/{pid}/move", json={"type": "out", "qty": 1, "note": "x" * 501}).status_code == 400
+    assert owner.post(f"/api/products/{pid}/move", json={"type": "out", "qty": 1, "note": "x" * 500}).status_code == 200
+
+
+def test_senha_longa_demais_e_recusada(owner):
+    r = owner.post("/api/users", json={"name": "Ana", "username": "ana", "password": "x" * 201})
+    assert r.status_code == 400

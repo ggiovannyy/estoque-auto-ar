@@ -13,6 +13,7 @@ from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
@@ -52,6 +53,7 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = get_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
+                  MAX_CONTENT_LENGTH=64 * 1024,  # a maior requisição da tela tem poucas centenas de bytes
                   BACKUP_DIR=str(default_backup_dir(DATA)))
 
 
@@ -102,6 +104,15 @@ def bad_input(e):
     return err(str(e))
 
 
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(_):
+    return err("Os dados enviados são grandes demais.", 413)
+
+
+MAX_TEXT = 200  # nome, código, marca, usuário, senha...
+MAX_NOTE = 500  # observação da movimentação
+
+
 def json_body():
     """Corpo JSON da requisição como dicionário ({} se não houver corpo JSON)."""
     d = request.get_json(silent=True)
@@ -112,24 +123,26 @@ def json_body():
     return d
 
 
-def text(d, key):
-    """Campo de texto sem espaços nas pontas; None se vier vazio ou faltar."""
+def _str_field(d, key, max_len):
     v = d.get(key)
     if v is None:
         return None
     if not isinstance(v, str):
         raise BadInput(f"O campo {key} precisa ser texto.")
-    return v.strip() or None
+    if len(v) > max_len:
+        raise BadInput(f"O campo {key} aceita no máximo {max_len} caracteres.")
+    return v
+
+
+def text(d, key, max_len=MAX_TEXT):
+    """Campo de texto sem espaços nas pontas; None se vier vazio ou faltar."""
+    v = _str_field(d, key, max_len)
+    return None if v is None else (v.strip() or None)
 
 
 def secret(d, key):
     """Senha como foi digitada (espaços contam); "" se faltar."""
-    v = d.get(key)
-    if v is None:
-        return ""
-    if not isinstance(v, str):
-        raise BadInput(f"O campo {key} precisa ser texto.")
-    return v
+    return _str_field(d, key, MAX_TEXT) or ""
 
 
 USER_FIELDS = ("id", "name", "username", "role", "active")
@@ -526,7 +539,7 @@ def move(pid):
             db().rollback()
             return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
                                  "Confira e salve de novo.", qty=row["qty"]), 409
-    new, e = record_move(pid, mtype, qty, text(d, "note"), g.user["id"], request_id)
+    new, e = record_move(pid, mtype, qty, text(d, "note", MAX_NOTE), g.user["id"], request_id)
     if e:
         db().rollback()
         return err(e)
