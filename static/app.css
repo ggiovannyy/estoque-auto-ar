@@ -207,4 +207,9 @@ details.edit[open] summary { margin-bottom: 10px; }
 .setting small { color: var(--muted); display: block; }
 .section { margin-bottom: 18px; }
 .section > h3 { font-size: 1.15rem; margin-bottom: 8px; }
+/* Sem style="..." nos modelos: a CSP não libera estilo inline. */
+.muted.lead { margin-top: -6px; }
+.min-input { display: flex; gap: 8px; width: 150px; flex: none; }
+.actions { display: flex; gap: 6px; flex: none; }
+.section > .btn, .card > .btn.block, #del { margin-top: 10px; }
 a.btn { text-decoration: none; }

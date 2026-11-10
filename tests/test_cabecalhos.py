@@ -20,6 +20,13 @@ def test_csp_so_permite_scripts_do_proprio_sistema(app):
     assert diretivas["object-src"] == "'none'"
 
 
+def test_csp_nao_libera_estilo_inline(app):
+    """A tela não usa style="..." nem <style>: a CSP não precisa de 'unsafe-inline' para estilos."""
+    csp = app.test_client().get("/").headers["Content-Security-Policy"]
+    diretivas = dict(d.strip().split(" ", 1) for d in csp.split(";"))
+    assert "'unsafe-inline'" not in diretivas["style-src"]
+
+
 def test_api_nao_fica_em_cache_mas_arquivos_estaticos_podem(app):
     c = app.test_client()
     assert c.get("/api/state").headers["Cache-Control"] == "no-store"

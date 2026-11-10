@@ -70,11 +70,11 @@ def csv_safe(value):
 
 
 # A interface so carrega os proprios arquivos; as fontes vem do Google Fonts.
-# 'unsafe-inline' em style-src: os templates usam style="..." pontuais (nao ha script inline).
+# Sem 'unsafe-inline': a tela nao usa style="..." nem <style> (testado em e2e/test_csp.py).
 CONTENT_SECURITY_POLICY = "; ".join([
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
