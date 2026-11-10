@@ -103,7 +103,8 @@ exato do sistema de notas.
 
 | Arquivo | Linhas | Papel |
 |---|---|---|
-| `app.py` | ~586 | Aplicação Flask: esquema do banco, rotas `/api/*`, autenticação e permissões |
+| `app.py` | ~546 | Aplicação Flask: rotas `/api/*`, autenticação e permissões |
+| `migrations.py` | ~95 | Esquema do banco em passos numerados (`MIGRATIONS`), `migrate`, `schema_version`, `SchemaTooNewError` |
 | `security.py` | ~88 | Regras sem dependência do Flask: senha mínima, `LoginThrottle`, `csv_safe`, cabeçalhos de segurança/CSP |
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
 | `run.py` | ~88 | Ponto de entrada: gera certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
@@ -116,7 +117,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0` |
-| `tests/` | ~570 | 69 testes pytest |
+| `tests/` | ~710 | 76 testes pytest |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -136,7 +137,16 @@ settings   (key, value)                             -- min_default = '2'
   refrigerante, Óleo, Sensor, Correia, Outros.
 - **Alerta:** `qty <= COALESCE(min_qty, min_default)`.
 - **Exclusão de peça é lógica:** `active=0` e `barcode=NULL`, o que libera o código de barras e preserva o histórico.
-- **Não há mecanismo de migração:** só `CREATE TABLE IF NOT EXISTS`. Isso está nas pendências (seção 8).
+- **Migrações (`migrations.py`):**
+  - A versão do banco fica em `PRAGMA user_version`. Ao abrir, o `init_db` aplica em ordem só os passos pendentes
+    de `MIGRATIONS`.
+  - Cada passo roda em uma transação junto com a troca de versão: se falhar, o banco fica como estava.
+  - O passo 1 é o esquema original, com `IF NOT EXISTS`. Bancos criados antes das migrações (versão 0) sobem para a 1
+    sem perder dados.
+  - Um banco de versão mais nova que o sistema é recusado (`SchemaTooNewError`), para uma versão antiga não estragá-lo.
+  - **Para mudar o esquema:** acrescentar um passo no fim da lista, com teste de banco antigo subindo de versão.
+    Nunca alterar um passo que já foi para a oficina.
+  - As categorias iniciais só são criadas no passo 1. Se o dono excluir todas, elas não voltam ao reiniciar.
 - **Formato de data:** texto `YYYY-MM-DD HH:MM:SS`, hora local.
 
 ### 3.4 API (todas JSON; exigem login, exceto `state`, `setup` e `login`)
@@ -266,9 +276,14 @@ a97e956 Sistema de estoque Maxx Auto Ar
 3. Revisão com `/addy-review` (5 eixos). Os itens 1 a 5 foram corrigidos no PR #1, com testes escritos antes de cada
    correção e verificação por mutação.
 4. "Itens rápidos" no PR #2 (backup, início automático, primeiro acesso local, cabeçalhos, versões fixas, CRLF).
+5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
+   (PR #3), `iniciar.bat` usando o `py` (PR #4) e migrações do banco (PR #5).
 
-**PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1) e
-[#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2), ambos juntados à `main`.
+**PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
+[#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
+[#3](https://github.com/ggiovannyy/estoque-auto-ar/pull/3) e
+[#4](https://github.com/ggiovannyy/estoque-auto-ar/pull/4), juntados à `main`;
+[#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5), migrações.
 
 ---
 
@@ -276,14 +291,16 @@ a97e956 Sistema de estoque Maxx Auto Ar
 
 ### 8.1 Imediatas (testes na máquina do desenvolvedor e na oficina)
 
-- [ ] **Rodar na máquina Windows do desenvolvedor.**
-  - Ela tem o **Python Install Manager** (instalador novo do python.org, comando `py`), versão 26.4.
-  - **Ainda não foi confirmado** se há um runtime instalado: rodar `py list`. Se vier vazio, `py install 3.13`.
-  - O `iniciar.bat` usa `python -m venv`. Se o alias `python` não funcionar com o Install Manager, adaptar o `.bat`
-    para tentar `py -3.13` como alternativa.
+- [x] **Rodar na máquina Windows do desenvolvedor.** Feito em 08/11/2026 (Windows 11, Python 3.14.4 pelo Install
+  Manager). Lá o comando `python` cai no atalho da Microsoft Store; o `iniciar.bat` agora tenta `py -3` primeiro
+  (PR #4). Projeto em `Documentos\Maxx Auto Ar\estoque-auto-ar`, que fica dentro do OneDrive.
 - [ ] **Liberar o Python no Firewall do Windows** ("Redes privadas"), senão o celular não conecta.
-- [ ] **Testar os `.bat` no Windows.** Nunca foram executados: `iniciar.bat`, `instalar-inicio-automatico.bat` e
-  `remover-inicio-automatico.bat`.
+- [ ] **Testar os `.bat` no Windows.**
+  - `iniciar.bat`: testado pelo `cmd` (primeira execução instala e sobe o https; a segunda pula a instalação).
+    Falta abrir com dois cliques pelo Explorador.
+  - `instalar-inicio-automatico.bat` e `remover-inicio-automatico.bat`: nunca executados.
+- [ ] **Instalar na oficina em pasta de caminho curto** (ex.: `C:\MaxxEstoque`). Num caminho muito longo, a geração
+  do certificado falhou ("nome do arquivo muito grande") e o sistema caiu para http, sem câmera no celular.
 - [ ] **Testar a câmera em celular real** (Android e iPhone). Confirmar o fluxo do certificado autoassinado,
   principalmente no iPhone/Safari.
 - [ ] **Testar o leitor USB real.** Confirmar que envia Enter. Ver também a divergência UPC-A (12 dígitos) × EAN-13
@@ -292,16 +309,14 @@ a97e956 Sistema de estoque Maxx Auto Ar
 - [ ] **Reservar IP fixo** (reserva DHCP) para o computador da oficina no roteador.
 - [ ] **Demonstrar ao cliente e validar.**
 - [ ] Na instalação da oficina, usar uma cópia **sem** a pasta `data/` dos testes.
-- [ ] **Excluir as branches já juntadas no GitHub** (`fix/revisao-itens-1-5`, `melhorias/itens-rapidos`). A sessão na
-  nuvem não tinha permissão; dá para excluir pelo botão "Delete branch" de cada PR.
+- [x] **Excluir as branches já juntadas no GitHub.** Feito em 10/11/2026.
 
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
-Os itens 1 a 8 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2). Faltam:
+Os itens 1 a 9 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5). Faltam:
 
 | # | Item | Sugestão |
 |---|---|---|
-| 9 | **Sem migração de banco** | `PRAGMA user_version` + migrações numeradas, **antes** da primeira atualização com dados reais |
 | 10 | `movements.qty` tem dois significados (em `adjust` é a nova contagem) | `delta` + `balance` bastam; simplificar |
 | 11 | Quantidade inicial inválida/negativa vira 0 em silêncio (`create_product`) | Retornar 400 |
 | 12 | `handleCode` decide "peça nova" comparando o texto `"não cadastrada"` | `api()` expor o status HTTP e checar 404 |
@@ -350,8 +365,8 @@ Os itens 1 a 8 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2). Faltam:
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 69 testes, ~10 s
-python -m pyflakes app.py run.py backup.py security.py tests/
+pytest -q            # 76 testes, ~15 s
+python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -377,7 +392,7 @@ python -m pyflakes app.py run.py backup.py security.py tests/
 - **Verificar de verdade:** além do pytest, subir o servidor real (com `MAXX_DATA` temporário) e testar no navegador
   quando a mudança é de interface.
 - **Relatar com honestidade:** o que foi testado e o que **não** foi (ex.: `.bat` sem Windows, câmera sem celular real).
-- **Clean code:** módulos com responsabilidade única (`security.py`, `backup.py`), nada de código morto, nomes claros,
+- **Clean code:** módulos com responsabilidade única (`security.py`, `backup.py`, `migrations.py`), nada de código morto, nomes claros,
   comentários só para o porquê não óbvio. O `app.py` não deve crescer sem necessidade: extrair módulos quando fizer
   sentido.
 - **Skills do projeto** (`.claude/`):
@@ -391,8 +406,7 @@ python -m pyflakes app.py run.py backup.py security.py tests/
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Conferir o Python no Windows (`py list`; se vazio, `py install 3.13`) e rodar `iniciar.bat`. Adaptar o `.bat` se o
-   comando `python` não funcionar com o Install Manager.
-3. Rodar `pytest -q` na máquina local (esperado: 69 passed).
-4. Fazer os testes da seção 8.1 que forem possíveis na máquina do desenvolvedor (computador e celular no mesmo Wi-Fi).
-5. Depois, atacar o item 9 (migrações) antes de qualquer mudança de esquema, e seguir com os demais itens da 8.2.
+2. Rodar `pytest -q` (esperado: 76 passed).
+3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
+   no mesmo Wi-Fi com câmera e certificado, leitor USB).
+4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.

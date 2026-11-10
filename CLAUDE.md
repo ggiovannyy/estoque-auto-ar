@@ -22,7 +22,8 @@ arquitetura, decisões, histórico e a lista de pendências.
 
 - Flask + SQLite (`data/estoque.db`, WAL) e HTML/CSS/JS puros, sem build.
 - **Módulos:**
-  - `app.py`: rotas `/api/*`, esquema do banco e permissões.
+  - `app.py`: rotas `/api/*` e permissões.
+  - `migrations.py`: esquema do banco em passos numerados (`MIGRATIONS`), versão em `PRAGMA user_version`.
   - `security.py`: senha, limitador de login, CSV e cabeçalhos.
   - `backup.py`: backup diário para a pasta do OneDrive ou do Google Drive.
   - `run.py`: certificado https autoassinado, backup e servidor.
@@ -34,8 +35,8 @@ arquitetura, decisões, histórico e a lista de pendências.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q                                   # 69 testes
-python -m pyflakes app.py run.py backup.py security.py tests/
+pytest -q                                   # 76 testes
+python -m pyflakes app.py run.py backup.py security.py migrations.py tests/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```
@@ -46,6 +47,8 @@ python run.py --http --port 8000            # sem https (câmera do celular não
 
 ## Invariantes que não podem quebrar
 
+- Mudança de esquema só por **um passo novo no fim de `MIGRATIONS`**, com teste de banco antigo subindo de versão.
+  Nunca alterar, remover ou reordenar um passo existente: ele já rodou nos bancos da oficina.
 - Movimentação de estoque roda em `BEGIN IMMEDIATE` (`record_move` exige transação aberta). Sem isso, há perda de
   quantidade com acessos simultâneos (`tests/test_concorrencia.py`).
 - Primeiro acesso (`/api/setup`) só de 127.0.0.1/::1.
