@@ -37,6 +37,8 @@ async function api(path, opts = {}) {
   if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status });
   return data;
 }
+/* Sem tela de toque: dá para pôr o foco num campo sem abrir o teclado do celular. */
+const hasMouse = () => !matchMedia("(pointer: coarse)").matches;
 const formBody = (f) => Object.fromEntries(new FormData(f));
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [, m, dd] = d.split("-"); return `${dd}/${m} ${t.slice(0, 5)}`; };
 function beep() {
@@ -124,12 +126,16 @@ function shell(inner) {
     <main><div class="wrap">${inner}</div></main></div>`;
 }
 
+/* Etiqueta da peça em alerta (lista e folha da peça). */
+const stockTag = (p) => !p.low ? ""
+  : `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>`;
+
 function itemRow(p) {
   const cls = p.qty === 0 ? "zero" : p.low ? "low" : "";
   const meta = [p.code, p.brand].filter(Boolean).join(" · ");
   return `<button class="item ${cls}" data-open="${p.id}">
     <div class="t"><b>${esc(p.name)}</b><small>${esc(meta || p.barcode || "sem código")}</small>
-      ${p.low ? `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>` : ""}</div>
+      ${stockTag(p)}</div>
     <div class="qty"><b>${p.qty}</b><small>mín. ${p.min_effective}</small></div></button>`;
 }
 
@@ -159,13 +165,19 @@ function alertsView() {
     ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
 }
 
+const MOVE_LABEL = { in: "Entrada", out: "Saída", adjust: "Contagem" };
+/* Linha de movimentação: no Histórico geral leva o nome da peça; na folha da peça, não. */
+function moveRow(m, withProduct) {
+  const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
+  const amount = m.type === "adjust" ? `→ ${m.balance}` : (m.delta > 0 ? "+" : "") + m.delta;
+  const what = MOVE_LABEL[m.type] + (m.note ? " · " + esc(m.note) : "");
+  const who = `${esc(m.user || "")} · ${fmtDate(m.created_at)}`;
+  const text = withProduct ? `<b>${esc(m.product)}</b><small>${what} · ${who}</small>` : `${what}<small>${who}</small>`;
+  return `<div class="mv"><div>${text}</div><div class="d ${cls}">${amount}</div></div>`;
+}
+
 function historyView() {
-  const rows = S.moves.map((m) => {
-    const lbl = m.type === "in" ? "Entrada" : m.type === "out" ? "Saída" : "Contagem";
-    const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
-    const d = m.type === "adjust" ? `→ ${m.balance}` : (m.delta > 0 ? "+" : "") + m.delta;
-    return `<div class="mv"><div><b>${esc(m.product)}</b><small>${lbl}${m.note ? " · " + esc(m.note) : ""} · ${esc(m.user || "")} · ${fmtDate(m.created_at)}</small></div><div class="d ${cls}">${d}</div></div>`;
-  }).join("");
+  const rows = S.moves.map((m) => moveRow(m, true)).join("");
   shell(`<h2 class="page">Histórico</h2><div class="card">${rows || '<div class="empty">Sem movimentações ainda.</div>'}</div>`);
 }
 
@@ -228,7 +240,7 @@ function scanView() {
     <button class="btn block ghost" id="cam">Usar a câmera do celular</button>
     <p class="muted" style="margin-top:14px">Com o leitor de código de barras, basta clicar no campo e ler a peça. Se ela já existir, abre para dar entrada ou saída; se não, abre o cadastro.</p>`);
   const input = $("#code");
-  if (!matchMedia("(pointer: coarse)").matches) input.focus();
+  if (hasMouse()) input.focus();
   $("#scanform").onsubmit = (e) => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; handleCode(v); } };
   $("#cam").onclick = startCamera;
 }
@@ -261,13 +273,13 @@ async function handleCode(code) {
 function openSheet(html) {
   sheetRoot.innerHTML = `<div class="overlay" data-close><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
   const first = sheetRoot.querySelector("input:not([type=hidden]), button.btn");
-  if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
+  if (first && hasMouse()) first.focus();
 }
 function closeSheet() {
   sheetRoot.innerHTML = "";
   // Na aba Escanear, o leitor USB "digita" no campo: devolve o foco para a próxima leitura.
   const code = $("#code");
-  if (code && !matchMedia("(pointer: coarse)").matches) code.focus();
+  if (code && hasMouse()) code.focus();
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
@@ -299,11 +311,9 @@ async function openProduct(id) {
   try { p = await api("/products/" + id); } catch (e) { toast(e.message, true); return; }
   let type = "out";
   const owner = S.user.role === "dono";
-  const hist = p.movements.map((m) => { const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
-    const lbl = m.type === "in" ? "Entrada" : m.type === "out" ? "Saída" : "Contagem";
-    return `<div class="mv"><div>${lbl}${m.note ? " · " + esc(m.note) : ""}<small>${esc(m.user || "")} · ${fmtDate(m.created_at)}</small></div><div class="d ${cls}">${m.type === "adjust" ? "→ " + m.balance : (m.delta > 0 ? "+" : "") + m.delta}</div></div>`; }).join("");
+  const hist = p.movements.map((m) => moveRow(m, false)).join("");
   openSheet(`<header><div><h3>${esc(p.name)}</h3><span class="muted">${esc([p.category, p.code, p.brand].filter(Boolean).join(" · "))}</span></div><button class="x" data-close aria-label="Fechar">×</button></header>
-    <div class="bigqty"><b>${p.qty}</b><span class="muted">em estoque · mínimo ${p.min_effective}</span> ${p.low ? `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>` : ""}</div>
+    <div class="bigqty"><b>${p.qty}</b><span class="muted">em estoque · mínimo ${p.min_effective}</span> ${stockTag(p)}</div>
     <div id="merr"></div>
     <div class="seg" role="group" aria-label="Tipo de movimentação">
       <button class="out" data-type="out" aria-pressed="true">Saída</button><button class="in" data-type="in" aria-pressed="false">Entrada</button><button data-type="adjust" aria-pressed="false">Contagem</button></div>
