@@ -129,13 +129,14 @@ exato do sistema de notas.
 | `static/app.js` | ~373 | Toda a interface (estado global `S`, `render()`, abas, folhas modais, leitura de código) |
 | `static/app.css` | ~169 | Estilos (tokens de cor em `:root`) |
 | `static/vendor/html5-qrcode.min.js` | — | Biblioteca de leitura por câmera, **v2.3.8, copiada localmente** (sem CDN) |
-| `static/icon.svg`, `manifest.webmanifest` | — | Ícone e PWA |
+| `static/logo.png`, `static/logo-sem-slogan.png` | — | Logo da oficina (login, barra lateral e cabeçalho do celular) |
+| `static/icon.svg`, `manifest.webmanifest` | — | Ícone provisório e PWA |
 | `iniciar.bat` / `iniciar.sh` | — | Cria `.venv`, instala dependências (reinstala quando `requirements.txt` muda) e roda `run.py` |
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
 | `tests/` | ~1500 | 164 testes pytest da API |
-| `e2e/` | ~260 | 11 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
+| `e2e/` | ~390 | 17 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
 | `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
@@ -214,9 +215,17 @@ settings   (key, value)                             -- min_default = '2'
 - **Mais:** exportar CSV; mínimo padrão (dono); **Backup** (dono: última cópia, pasta, "Fazer backup agora" e aviso
   "Atrasado" com mais de 48 h); categorias; usuários (dono); trocar senha; sair.
 - **Folha da peça:** Saída, Entrada ou Contagem (Contagem só para o dono), com stepper, observação, últimas movimentações e edição de dados.
-- **Design:** azul-petróleo `#0b2b3c`, fundo gelo `#eef5f7`, ação ciano `#0e9db9`, alerta âmbar `#f5a000`, zerado
-  vermelho `#c93a26`. Fontes: Barlow Semi Condensed (títulos) e Barlow (texto), do Google Fonts, com fonte do sistema
-  como reserva se não houver internet. No desktop (≥ 900px) a navegação vira barra lateral.
+- **Design:** segue a logo do cliente (`static/logo.png`; `static/logo-sem-slogan.png` no cabeçalho do celular).
+  - Cores: ação no azul da logo `#0062b1` (6,2:1 com texto branco), vermelho da logo `#e8333a` só como faixa
+    decorativa (4,2:1, não serve para texto), saída/zerado em vermelho `#c62828`, alerta âmbar `#f5a000`, texto
+    azul-petróleo `#0b2b3c`, fundo `#f2f5f8`. Cabeçalho e barra lateral brancos, porque a logo foi feita para fundo
+    claro (o azul dela some sobre o azul-petróleo).
+  - As imagens da logo saíram do PNG enviado pelo cliente: recortadas, com fundo transparente e as cores levadas às
+    três da marca (vermelho, azul e preto). Ainda não há versão vetorial nem ícone quadrado: `icon.svg` (aba do
+    navegador e PWA) continua o provisório.
+  - Fontes: Barlow Semi Condensed (títulos) e Barlow (texto), do Google Fonts, com fonte do sistema como reserva se
+    não houver internet. No desktop (≥ 900px) a navegação vira barra lateral.
+  - `e2e/test_identidade_visual.py` confere a logo e o contraste (≥ 4,5:1) do botão principal e da barra lateral.
 
 ---
 
@@ -454,7 +463,7 @@ para o porte.
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
 pytest -q            # 164 testes da API, ~45 s
-pytest -q e2e        # 11 testes de interface, ~18 s
+pytest -q e2e        # 17 testes de interface, ~30 s
 python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
