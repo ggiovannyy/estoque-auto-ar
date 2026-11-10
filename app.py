@@ -3,6 +3,7 @@
 Backend Flask + SQLite. Toda a interface fica em /static (mobile-first).
 """
 import csv
+import hmac
 import io
 import math
 import os
@@ -16,7 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
 from migrations import migrate
-from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
+from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, password_mark
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("MAXX_DATA", os.path.join(BASE, "data"))
@@ -24,6 +25,9 @@ os.makedirs(DATA, exist_ok=True)
 DB_PATH = os.path.join(DATA, "estoque.db")
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
+# Teto de quantidade: o leitor USB "digita" o codigo de barras e um Enter no campo em foco, inclusive no de quantidade.
+MAX_QTY = 100_000
+QTY_HINT = "Se o leitor estava no campo de quantidade, o código de barras pode ter entrado ali."
 
 # O primeiro acesso cria o dono: so pode ser feito no computador onde o sistema roda,
 # para ninguem no Wi-Fi da oficina se cadastrar como dono antes dele.
@@ -88,12 +92,24 @@ def err(msg, code=400):
     return jsonify(error=msg), code
 
 
+USER_FIELDS = ("id", "name", "username", "role", "active")
+
+
+def start_session(user_id, password_hash):
+    session.clear()
+    session.permanent = True
+    session["uid"] = user_id
+    session["pw"] = password_mark(password_hash)
+
+
 def current_user():
     uid = session.get("uid")
     if not uid:
         return None
-    u = db().execute("SELECT id,name,username,role,active FROM users WHERE id=?", (uid,)).fetchone()
-    return u if u and u["active"] else None
+    u = db().execute("SELECT id,name,username,role,active,password_hash FROM users WHERE id=?", (uid,)).fetchone()
+    if not u or not u["active"] or not hmac.compare_digest(session.get("pw", ""), password_mark(u["password_hash"])):
+        return None
+    return {k: u[k] for k in USER_FIELDS}
 
 
 def login_required(owner=False):
@@ -139,12 +155,18 @@ def normalize_barcode(v):
     return code
 
 
-def to_int(v, default=None, minimum=0):
+def to_int(v, default=None, minimum=0, maximum=None):
     try:
         n = int(v)
     except (TypeError, ValueError):
         return default
-    return n if n >= minimum else default
+    return n if n >= minimum and (maximum is None or n <= maximum) else default
+
+
+def read_min(v):
+    """Mínimo para o alerta: (valor, erro)."""
+    n = to_int(v, maximum=MAX_QTY)
+    return (n, None) if n is not None else (None, f"Mínimo inválido: informe um número inteiro de 0 a {MAX_QTY}.")
 
 
 # ---------------------------------------------------------------- pages
@@ -174,7 +196,7 @@ def state():
     u = current_user()
     return jsonify(setup_needed=users == 0,
                    setup_here=request.remote_addr in LOCAL_ADDRESSES,
-                   user=dict(u) if u else None,
+                   user=u,
                    min_default=min_default())
 
 
@@ -190,11 +212,11 @@ def setup():
         return err("Informe nome e usuário.")
     if error := password_error(pw):
         return err(error)
+    pw_hash = generate_password_hash(pw)
     cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
-                       (name, username.lower(), generate_password_hash(pw)))
+                       (name, username.lower(), pw_hash))
     db().commit()
-    session.permanent = True
-    session["uid"] = cur.lastrowid
+    start_session(cur.lastrowid, pw_hash)
     return jsonify(ok=True)
 
 
@@ -212,8 +234,7 @@ def login():
         user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
     user_throttle.success(user_key)
-    session.permanent = True
-    session["uid"] = u["id"]
+    start_session(u["id"], u["password_hash"])
     return jsonify(ok=True)
 
 
@@ -317,7 +338,9 @@ def read_product_fields(d):
     name = clean(d.get("name"))
     if not name:
         return None, "Informe o nome da peça."
-    min_raw = d.get("min_qty")
+    min_qty, error = read_min(d["min_qty"]) if d.get("min_qty") not in (None, "") else (None, None)
+    if error:
+        return None, error
     return {
         "barcode": normalize_barcode(d.get("barcode")),
         "code": clean(d.get("code")),
@@ -325,7 +348,7 @@ def read_product_fields(d):
         "category_id": to_int(d.get("category_id")),
         "ncm": clean(d.get("ncm")),
         "brand": clean(d.get("brand")),
-        "min_qty": to_int(min_raw) if min_raw not in (None, "") else None,
+        "min_qty": min_qty,
     }, None
 
 
@@ -351,6 +374,8 @@ def record_move(pid, mtype, qty, note, uid):
     else:  # adjust: qty = nova contagem
         delta = qty - cur
     new = cur + delta
+    if new > MAX_QTY:
+        return None, f"O estoque passaria de {MAX_QTY} unidades. {QTY_HINT}"
     conn.execute("UPDATE products SET qty=? WHERE id=?", (new, pid))
     conn.execute("""INSERT INTO movements(product_id,type,delta,balance,note,user_id,created_at)
                     VALUES (?,?,?,?,?,?,?)""", (pid, mtype, delta, new, note, uid, now()))
@@ -365,9 +390,9 @@ def create_product():
     if e:
         return err(e)
     qty_raw = d.get("qty")
-    initial = 0 if qty_raw in (None, "") else to_int(qty_raw)
+    initial = 0 if qty_raw in (None, "") else to_int(qty_raw, maximum=MAX_QTY)
     if initial is None:
-        return err("Quantidade inicial inválida: informe um número inteiro, 0 ou mais.")
+        return err(f"Quantidade inicial inválida: informe um número inteiro de 0 a {MAX_QTY}. {QTY_HINT}")
     try:
         cur = db().execute("""INSERT INTO products(barcode,code,name,category_id,ncm,brand,qty,min_qty,created_at)
                               VALUES (:barcode,:code,:name,:category_id,:ncm,:brand,0,:min_qty,:now)""",
@@ -414,9 +439,11 @@ def move(pid):
     mtype = d.get("type")
     if mtype not in ("in", "out", "adjust"):
         return err("Tipo de movimentação inválido.")
-    qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1)
+    if mtype == "adjust" and g.user["role"] != "dono":  # a contagem define o saldo direto, sem venda nem compra
+        return err("Apenas o dono pode fazer a contagem.", 403)
+    qty = to_int(d.get("qty"), None, 0 if mtype == "adjust" else 1, MAX_QTY)
     if qty is None:
-        return err("Informe uma quantidade válida.")
+        return err(f"Informe uma quantidade válida, até {MAX_QTY}. {QTY_HINT}")
     db().execute("BEGIN IMMEDIATE")  # trava escritas concorrentes ate o commit
     new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"])
     if e:
@@ -469,9 +496,9 @@ def export_csv():
 @app.put("/api/settings")
 @login_required(owner=True)
 def set_settings():
-    n = to_int((request.get_json(silent=True) or {}).get("min_default"))
-    if n is None:
-        return err("Informe um número válido.")
+    n, error = read_min((request.get_json(silent=True) or {}).get("min_default"))
+    if error:
+        return err(error)
     db().execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('min_default', ?)", (str(n),))
     db().commit()
     return jsonify(min_default=n)
@@ -536,7 +563,10 @@ def edit_user(uid):
     if d.get("password"):
         if error := password_error(d["password"]):
             return err(error)
-        db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["password"]), uid))
+        pw_hash = generate_password_hash(d["password"])
+        db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, uid))
+        if uid == g.user["id"]:
+            session["pw"] = password_mark(pw_hash)  # quem redefiniu a propria senha continua logado aqui
     db().commit()
     return jsonify(ok=True)
 
@@ -550,8 +580,10 @@ def change_password():
         return err("Senha atual incorreta.")
     if error := password_error(d.get("new")):
         return err(error)
-    db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(d["new"]), g.user["id"]))
+    pw_hash = generate_password_hash(d["new"])
+    db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, g.user["id"]))
     db().commit()
+    session["pw"] = password_mark(pw_hash)  # este aparelho continua logado; os outros saem
     return jsonify(ok=True)
 
 

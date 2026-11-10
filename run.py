@@ -36,7 +36,13 @@ def main():
     ap.add_argument("--port", type=int)
     a = ap.parse_args()
     ips = lan_ips()
-    use_https = not a.http and ensure_cert(CERT, KEY, ips)
+    use_https = not a.http
+    if use_https and not ensure_cert(CERT, KEY, ips):
+        # Cair para http em silêncio mandaria a senha sem criptografia pelo Wi-Fi, que é o mesmo dos clientes.
+        print("\n  O sistema NÃO foi aberto: não foi possível preparar o https (veja o erro acima).")
+        print(f"  Confira se a pasta {DATA} pode ser gravada e se o caminho não é longo demais.")
+        print("  Para abrir mesmo assim, sem criptografia e sem câmera no celular: python run.py --http\n")
+        return 1
     port = a.port or (8443 if use_https else 8000)
     scheme = "https" if use_https else "http"
     app.config["SESSION_COOKIE_SECURE"] = use_https  # cookie de login nunca trafega sem criptografia

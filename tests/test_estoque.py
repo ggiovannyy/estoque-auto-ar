@@ -158,3 +158,40 @@ def test_edicao_tambem_grava_com_13_digitos(owner):
 def test_outros_codigos_ficam_como_foram_lidos(owner):
     for code in ("7891234567895", "12345670", "ABC-12345678", "1234567890123456", "03600029145a"):
         assert new_product(owner, name=code, barcode=code)["barcode"] == code
+
+
+# Teto de quantidade: o leitor USB "digita" o código de barras e um Enter no campo que estiver em foco.
+CODIGO_LIDO_NO_CAMPO = 7891234567895
+
+
+def test_quantidade_acima_do_teto_e_recusada_na_movimentacao(owner):
+    p = new_product(owner, qty=5)
+    for type_ in ("in", "out", "adjust"):
+        for bad in (100_001, CODIGO_LIDO_NO_CAMPO, 10**20):
+            r = move(owner, p["id"], type_, bad)
+            assert r.status_code == 400, (type_, bad)
+            assert "100000" in r.get_json()["error"]
+    assert qty_of(owner, p["id"]) == 5
+
+
+def test_entrada_que_passaria_do_teto_e_recusada(owner):
+    p = new_product(owner, qty=99_999)
+    assert move(owner, p["id"], "in", 2).status_code == 400
+    assert move(owner, p["id"], "in", 1).status_code == 200
+    assert qty_of(owner, p["id"]) == 100_000
+
+
+def test_quantidade_inicial_acima_do_teto_e_recusada(owner):
+    r = owner.post("/api/products", json={"name": "Peça", "qty": CODIGO_LIDO_NO_CAMPO})
+    assert r.status_code == 400
+    assert owner.get("/api/products").get_json() == []
+    assert new_product(owner, qty=100_000)["qty"] == 100_000
+
+
+def test_minimo_invalido_ou_acima_do_teto_e_recusado(owner):
+    for bad in (-1, "abc", 100_001):
+        r = owner.post("/api/products", json={"name": "Peça", "qty": 1, "min_qty": bad})
+        assert r.status_code == 400, bad
+        assert "Mínimo" in r.get_json()["error"]
+        assert owner.put("/api/settings", json={"min_default": bad}).status_code == 400
+    assert owner.get("/api/products").get_json() == []

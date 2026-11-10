@@ -162,3 +162,16 @@ def test_alertas_mostram_todas_as_pecas_baixas_mesmo_com_busca_ativa(page, api):
 
     open_tab(page, "alerts")
     expect(page.locator(f'[data-open="{low["id"]}"]')).to_contain_text("Estoque baixo")
+
+
+# ---------------------------------------------------------------- permissões
+def test_atendente_nao_ve_a_contagem_e_o_dono_ve(page, attendant_page, api):
+    p = api.product(qty=5)
+    for pg, sees_count in ((attendant_page, False), (page, True)):
+        pg.goto("/")
+        search(pg, p["name"])
+        pg.locator(f'[data-open="{p["id"]}"]').click()
+        expect(pg.locator('[data-type="out"]')).to_be_visible()
+        expect(pg.locator('[data-type="adjust"]')).to_have_count(1 if sees_count else 0)
+        seg, last = pg.locator(".seg").bounding_box(), pg.locator(".seg button").last.bounding_box()
+        assert seg["x"] + seg["width"] - (last["x"] + last["width"]) < 8, "sobrou espaço vazio no seletor"

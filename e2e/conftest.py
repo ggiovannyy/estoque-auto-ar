@@ -119,3 +119,18 @@ def api(page):
             assert r.ok, r.text()
             return r.json()
     return Api
+
+
+@pytest.fixture
+def attendant_page(browser, base_url, page):
+    """Computador da oficina, logado como um atendente novo (criado pelo dono)."""
+    user = {"name": "Atendente", "username": unique("atendente").lower().replace(" ", ""), "password": "senha-do-atendente"}
+    assert page.request.post("/api/users", data=user).ok
+    ctx = browser.new_context(base_url=base_url, viewport={"width": 1280, "height": 800})
+    assert ctx.request.post("/api/login", data={"username": user["username"], "password": user["password"]}).ok
+    pg = ctx.new_page()
+    errors = []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    yield pg
+    ctx.close()
+    assert not errors, f"erro de JavaScript na página: {errors}"

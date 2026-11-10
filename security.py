@@ -1,4 +1,5 @@
 """Regras de seguranca que nao dependem do Flask: senha, tentativas de login e CSV."""
+import hashlib
 import threading
 import time
 
@@ -10,6 +11,11 @@ def password_error(pw):
     if len(pw or "") < MIN_PASSWORD:
         return f"A senha precisa ter pelo menos {MIN_PASSWORD} caracteres."
     return None
+
+
+def password_mark(password_hash):
+    """Marca da senha guardada no cookie de login: trocar a senha invalida as sessoes abertas com a antiga."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
 
 
 class LoginThrottle:
