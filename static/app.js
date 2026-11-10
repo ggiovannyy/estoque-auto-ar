@@ -109,8 +109,17 @@ async function loadAll() {
 /* Busca e filtro de categoria só mudam a lista: resumo e categorias continuam valendo. */
 async function reloadProducts() {
   try { if (!(await loadProducts())) return false; } catch (e) { toast(e.message, true); }
-  render();
+  showProducts();
   return true;
+}
+/* Redesenha só a lista da aba Estoque (o campo de busca continua o mesmo, com o foco e o teclado do celular). */
+function showProducts() {
+  const box = $("#plist");
+  if (!box || S.tab !== "stock") return render();
+  const key = focusKey(document.activeElement); // ex.: o filtro clicado continua com o foco depois de redesenhado
+  box.innerHTML = productListHtml();
+  const again = key && document.activeElement === document.body && $(key);
+  if (again) again.focus({ preventScroll: true });
 }
 /* Dados proprios de cada aba (independentes da busca/filtro da aba Estoque). */
 async function loadTabData() {
@@ -183,8 +192,7 @@ function itemRow(p) {
 /* Cabeçalho das colunas da lista: só aparece em tela larga (computador), onde código e marca viram colunas. */
 const LIST_HEADER = '<div class="cols" aria-hidden="true"><span>Peça</span><span>Código</span><span>Marca</span><span>Estoque</span></div>';
 
-function stockView() {
-  const s = S.summary || { items: 0, units: 0, low: 0 };
+function productListHtml() {
   const groups = {};
   S.products.forEach((p) => (groups[p.category || "Sem categoria"] ||= []).push(p));
   const list = Object.keys(groups).length
@@ -192,14 +200,18 @@ function stockView() {
     : `<div class="empty">${S.q || S.cat ? "Nenhuma peça encontrada." : "Nenhuma peça cadastrada ainda.<br>Toque em <b>+ Nova peça</b> ou use <b>Escanear</b>."}</div>`;
   const chips = [`<button class="chip" data-cat="0" aria-pressed="${!S.cat}">Todas</button>`]
     .concat(S.cats.filter((c) => c.products || c.id === S.cat).map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${S.cat === c.id}">${esc(c.name)} (${c.products})</button>`)).join("");
+  return `<div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
+    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`;
+}
+function stockView() {
+  const s = S.summary || { items: 0, units: 0, low: 0 };
   shell(`<h2 class="sr">Estoque</h2><div class="stats">
       <div class="stat"><b>${s.items}</b><span>peças cadastradas</span></div>
       <div class="stat"><b>${s.units}</b><span>unidades</span></div>
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
     <div class="searchrow"><div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
       <button class="btn new" data-act="new" aria-label="Nova peça"><span aria-hidden="true">+</span><span class="lbl">Nova peça</span></button></div>
-    <div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
-    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`);
+    <div id="plist">${productListHtml()}</div>`);
 }
 
 function alertsView() {
@@ -339,7 +351,7 @@ async function handleCode(code) {
 /* ---------------------------------------------------------------- sheets */
 /* Quem abriu a folha (seletor, porque a lista pode ser redesenhada): recebe o foco de volta ao fechar. */
 let sheetOpener = null;
-const FOCUS_KEYS = ["data-open", "data-act", "data-tab", "data-resetpw", "id"];
+const FOCUS_KEYS = ["data-open", "data-act", "data-tab", "data-cat", "data-resetpw", "id"];
 function focusKey(el) {
   const a = el && el !== document.body && FOCUS_KEYS.find((k) => el.hasAttribute(k));
   return a ? `[${a}="${CSS.escape(el.getAttribute(a))}"]` : null;
@@ -536,7 +548,7 @@ document.addEventListener("click", async (e) => {
   switch (t.dataset.act) {
     case "new": return openForm();
     case "more": t.disabled = true;
-      try { if (await loadProducts(true)) render(); } catch (er) { toast(er.message, true); t.disabled = false; }
+      try { if (await loadProducts(true)) showProducts(); } catch (er) { toast(er.message, true); t.disabled = false; }
       return;
     case "retry": t.disabled = true; await refresh(); t.disabled = false; return;
     case "pw": return openPw();
@@ -553,10 +565,8 @@ document.addEventListener("input", (e) => {
   if (e.target.id !== "q") return;
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
-    S.q = e.target.value.trim(); const pos = e.target.selectionStart;
-    if (!(await reloadProducts())) return;
-    const q = $("#q"); // com uma folha aberta (abriu uma peça antes da busca terminar), o foco fica nela
-    if (q && !sheetRoot.firstChild) { q.focus(); q.setSelectionRange(pos, pos); }
+    S.q = e.target.value.trim();
+    await reloadProducts();
   }, 250);
 });
 
