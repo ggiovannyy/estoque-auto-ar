@@ -31,8 +31,11 @@ QTY_HINT = "Se o leitor estava no campo de quantidade, o código de barras pode 
 # para ninguem no Wi-Fi da oficina se cadastrar como dono antes dele.
 LOCAL_ADDRESSES = {"127.0.0.1", "::1"}
 
-user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
+user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario (e por usuario logado, na troca de senha)
 ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
+# Usuario que nao existe tambem passa pelo calculo do hash: sem isso a resposta sai bem mais rapido e revela
+# quais usuarios existem.
+DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_hex(16))
 
 
 def get_secret():
@@ -267,6 +270,10 @@ def setup():
     return jsonify(ok=True)
 
 
+def too_many_attempts(wait):
+    return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
+
+
 @app.post("/api/login")
 def login():
     d = json_body()
@@ -274,9 +281,10 @@ def login():
     ip, user_key = request.remote_addr, (request.remote_addr, username)
     wait = max(ip_throttle.retry_after(ip), user_throttle.retry_after(user_key))
     if wait:
-        return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
+        return too_many_attempts(wait)
     u = db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
-    if not u or not u["active"] or not check_password_hash(u["password_hash"], secret(d, "password")):
+    password_ok = check_password_hash(u["password_hash"] if u else DUMMY_PASSWORD_HASH, secret(d, "password"))
+    if not u or not u["active"] or not password_ok:
         ip_throttle.failure(ip)
         user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
@@ -660,9 +668,14 @@ def edit_user(uid):
 def change_password():
     d = json_body()
     current, new_pw = secret(d, "current"), secret(d, "new")
+    key = ("troca de senha", g.user["id"])  # com um cookie roubado, nao da para chutar a senha atual sem limite
+    if wait := user_throttle.retry_after(key):
+        return too_many_attempts(wait)
     u = db().execute("SELECT password_hash FROM users WHERE id=?", (g.user["id"],)).fetchone()
     if not check_password_hash(u["password_hash"], current):
+        user_throttle.failure(key)
         return err("Senha atual incorreta.")
+    user_throttle.success(key)
     if error := password_error(new_pw):
         return err(error)
     pw_hash = generate_password_hash(new_pw)
