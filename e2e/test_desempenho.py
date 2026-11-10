@@ -60,3 +60,16 @@ def test_camera_carrega_a_biblioteca_e_abre_no_primeiro_toque(playwright, base_u
     expect(page.locator("#reader")).to_be_hidden()
     browser.close()
     assert not problems, problems
+
+
+def test_tela_nao_busca_nada_fora_do_proprio_servidor_e_carrega_as_fontes(page, base_url):
+    outside = []
+    page.on("request", lambda r: outside.append(r.url) if not r.url.startswith(base_url) else None)
+    page.goto("/")
+    expect(page.locator(".stats")).to_be_visible()
+    page.evaluate("document.fonts.ready")
+    assert not outside, f"pedidos para fora do sistema: {outside}"
+    for font in ("400 16px Barlow", "600 16px Barlow", "700 16px 'Barlow Semi Condensed'"):
+        assert page.evaluate(f"document.fonts.check(\"{font}\")"), f"fonte não carregou: {font}"
+    loaded = page.evaluate("[...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family + ' ' + f.weight)")
+    assert any("Barlow" in f for f in loaded), loaded
