@@ -110,3 +110,21 @@ def test_lotes_simultaneos_nao_perdem_quantidade(owner, login_client):
     total, = conn.execute("SELECT SUM(delta) FROM movements WHERE product_id=?", (b["id"],)).fetchone()
     conn.close()
     assert total == 240
+
+
+def test_corpo_ou_observacao_fora_do_formato_e_recusado(owner):
+    p = new_product(owner, qty=0)
+    item = [{"product_id": p["id"], "qty": 1}]
+    assert owner.post("/api/products/moves", json=[1, 2]).status_code == 400
+    assert batch(owner, "in", item, note=123).status_code == 400
+    assert batch(owner, "in", item, note="x" * 501).status_code == 400
+    assert batch(owner, "in", [{"product_id": p["id"], "qty": True}]).status_code == 400
+    assert qty_of(owner, p["id"]) == 0
+
+
+def test_lote_maximo_cabe_no_limite_do_corpo(owner):
+    """MAX_BATCH peças com contagem e a observação mais longa ainda cabem em MAX_CONTENT_LENGTH."""
+    ids = [new_product(owner, qty=appmod.MAX_QTY)["id"] for _ in range(appmod.MAX_BATCH)]
+    items = [{"product_id": pid, "qty": appmod.MAX_QTY, "expected": appmod.MAX_QTY} for pid in ids]
+    r = batch(owner, "adjust", items, note="x" * 500, request_id="r" * 60)
+    assert r.status_code == 200, r.get_json()

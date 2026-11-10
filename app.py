@@ -52,7 +52,7 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = get_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
-                  MAX_CONTENT_LENGTH=64 * 1024,  # a maior requisição da tela tem poucas centenas de bytes
+                  MAX_CONTENT_LENGTH=64 * 1024,  # a maior requisição é o lote da leitura contínua (~30 KB)
                   BACKUP_DIR=str(default_backup_dir(DATA)))
 
 
@@ -525,7 +525,7 @@ def read_batch_items(items, mtype):
 @login_required()
 def move_batch():
     """Leitura contínua: entradas ou contagens de várias peças numa transação só (tudo ou nada)."""
-    d = request.get_json(silent=True) or {}
+    d = json_body()
     mtype = d.get("type")
     if mtype not in ("in", "adjust"):
         return err("Tipo de movimentação inválido para o lote.")
@@ -555,7 +555,7 @@ def move_batch():
         names = "; ".join(f"{r['name']} (de {exp} para {r['qty']})" for r, exp in changed)
         return jsonify(error=f"O estoque mudou enquanto você contava: {names}. Confira e salve de novo.",
                        changed=[{"product_id": r["id"], "qty": r["qty"]} for r, _ in changed]), 409
-    note = clean(d.get("note"))
+    note = text(d, "note", MAX_NOTE)
     for n, (pid, qty, _) in enumerate(items):
         _, e = record_move(pid, mtype, qty, note, g.user["id"], request_id and f"{request_id}#{n}")
         if e:
