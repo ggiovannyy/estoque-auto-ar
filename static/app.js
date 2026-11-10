@@ -4,7 +4,7 @@
 const S = {
   user: null, setupNeeded: false, setupHere: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
-  low: [], q: "", cat: 0, loaded: false,
+  low: [], q: "", cat: 0, hasMore: false,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -37,9 +37,22 @@ async function api(path, opts = {}) {
   if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status });
   return data;
 }
-const fmtDate = (s) => { const [d, t] = s.split(" "); const [, m, dd] = d.split("-"); return `${dd}/${m} ${t.slice(0, 5)}`; };
+/* Sem tela de toque: dá para pôr o foco num campo sem abrir o teclado do celular. */
+const hasMouse = () => !matchMedia("(pointer: coarse)").matches;
+const formBody = (f) => Object.fromEntries(new FormData(f));
+/* Mensagem de erro dentro de um formulário (login, folhas). */
+const showError = (sel, e) => { $(sel).innerHTML = `<div class="err">${esc(e.message)}</div>`; };
+const fmtDate = (s) => {
+  const [d, t] = s.split(" ");
+  const [, m, dd] = d.split("-");
+  return `${dd}/${m} ${t.slice(0, 5)}`;
+};
 function beep() {
-  try { const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); setTimeout(() => { o.stop(); c.close(); }, 110); } catch {}
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator();
+    o.frequency.value = 880; o.connect(c.destination); o.start();
+    setTimeout(() => { o.stop(); c.close(); }, 110);
+  } catch {}
   if (navigator.vibrate) navigator.vibrate(60);
 }
 const lowCount = () => (S.summary ? S.summary.low : 0);
@@ -62,7 +75,7 @@ async function loadProducts(more = false) {
 }
 async function loadAll() {
   const [, summary, cats] = await Promise.all([loadProducts(), api("/summary"), api("/categories")]);
-  S.summary = summary; S.cats = cats; S.loaded = true;
+  S.summary = summary; S.cats = cats;
 }
 /* Busca e filtro de categoria só mudam a lista: resumo e categorias continuam valendo. */
 async function reloadProducts() {
@@ -93,9 +106,8 @@ function authView() {
     </form></div>`;
   $("#auth").onsubmit = async (e) => {
     e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.target));
-    try { await api(setup ? "/setup" : "/login", { method: "POST", body }); await boot(); }
-    catch (er) { $("#autherr").innerHTML = `<div class="err">${esc(er.message)}</div>`; }
+    try { await api(setup ? "/setup" : "/login", { method: "POST", body: formBody(e.target) }); await boot(); }
+    catch (er) { showError("#autherr", er); }
   };
 }
 
@@ -106,10 +118,13 @@ function setupElsewhereView() {
       em <b>https://localhost:8443</b>, para criar o usuário do dono. Depois é só entrar por aqui.</div></div>`;
 }
 
+/* Abas na ordem da barra de navegação: [chave, ícone, rótulo]. */
+const TABS = [
+  ["stock", "box", "Estoque"], ["alerts", "alert", "Alertas"], ["scan", "scan", "Escanear"],
+  ["history", "clock", "Histórico"], ["more", "menu", "Mais"],
+];
 function shell(inner) {
-  const tabs = [["stock", "box", "Estoque"], ["alerts", "alert", "Alertas"], ["scan", "scan", "Escanear"], ["history", "clock", "Histórico"], ["more", "menu", "Mais"]];
-  const order = ["stock", "alerts", "scan", "history", "more"];
-  const nav = order.map((k) => { const [, ic, label] = tabs.find((t) => t[0] === k);
+  const nav = TABS.map(([k, ic, label]) => {
     const cur = S.tab === k ? ' aria-current="page"' : "";
     if (k === "scan") return `<button class="scan" data-tab="scan"${cur}><span class="disc">${svg(ic)}</span><b>${label}</b></button>`;
     const dot = k === "alerts" && lowCount() ? `<span class="dot">${lowCount()}</span>` : "";
@@ -121,12 +136,16 @@ function shell(inner) {
     <main><div class="wrap">${inner}</div></main></div>`;
 }
 
+/* Etiqueta da peça em alerta (lista e folha da peça). */
+const stockTag = (p) => !p.low ? ""
+  : `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>`;
+
 function itemRow(p) {
   const cls = p.qty === 0 ? "zero" : p.low ? "low" : "";
   const meta = [p.code, p.brand].filter(Boolean).join(" · ");
   return `<button class="item ${cls}" data-open="${p.id}">
     <div class="t"><b>${esc(p.name)}</b><small>${esc(meta || p.barcode || "sem código")}</small>
-      ${p.low ? `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>` : ""}</div>
+      ${stockTag(p)}</div>
     <div class="qty"><b>${p.qty}</b><small>mín. ${p.min_effective}</small></div></button>`;
 }
 
@@ -156,13 +175,19 @@ function alertsView() {
     ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
 }
 
+const MOVE_LABEL = { in: "Entrada", out: "Saída", adjust: "Contagem" };
+/* Linha de movimentação: no Histórico geral leva o nome da peça; na folha da peça, não. */
+function moveRow(m, withProduct) {
+  const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
+  const amount = m.type === "adjust" ? `→ ${m.balance}` : (m.delta > 0 ? "+" : "") + m.delta;
+  const what = MOVE_LABEL[m.type] + (m.note ? " · " + esc(m.note) : "");
+  const who = `${esc(m.user || "")} · ${fmtDate(m.created_at)}`;
+  const text = withProduct ? `<b>${esc(m.product)}</b><small>${what} · ${who}</small>` : `${what}<small>${who}</small>`;
+  return `<div class="mv"><div>${text}</div><div class="d ${cls}">${amount}</div></div>`;
+}
+
 function historyView() {
-  const rows = S.moves.map((m) => {
-    const lbl = m.type === "in" ? "Entrada" : m.type === "out" ? "Saída" : "Contagem";
-    const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
-    const d = m.type === "adjust" ? `→ ${m.balance}` : (m.delta > 0 ? "+" : "") + m.delta;
-    return `<div class="mv"><div><b>${esc(m.product)}</b><small>${lbl}${m.note ? " · " + esc(m.note) : ""} · ${esc(m.user || "")} · ${fmtDate(m.created_at)}</small></div><div class="d ${cls}">${d}</div></div>`;
-  }).join("");
+  const rows = S.moves.map((m) => moveRow(m, true)).join("");
   shell(`<h2 class="page">Histórico</h2><div class="card">${rows || '<div class="empty">Sem movimentações ainda.</div>'}</div>`);
 }
 
@@ -187,11 +212,21 @@ function moreView() {
       <button class="btn dark block" data-act="logout" style="margin-top:8px">Sair</button></div>`);
   if (owner) { renderCats(); renderUsers(); renderBackup(); }
   const cf = $("#catform");
-  cf.onsubmit = async (e) => { e.preventDefault();
-    try { await api("/categories", { method: "POST", body: { name: new FormData(cf).get("name") } }); toast("Categoria criada."); await refresh(); } catch (er) { toast(er.message, true); } };
+  cf.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api("/categories", { method: "POST", body: { name: new FormData(cf).get("name") } });
+      toast("Categoria criada."); await refresh();
+    } catch (er) { toast(er.message, true); }
+  };
   const mf = $("#minform");
-  if (mf) mf.onsubmit = async (e) => { e.preventDefault();
-    try { const r = await api("/settings", { method: "PUT", body: { min_default: new FormData(mf).get("min") } }); S.minDefault = r.min_default; toast("Mínimo atualizado."); await refresh(); } catch (er) { toast(er.message, true); } };
+  if (mf) mf.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api("/settings", { method: "PUT", body: { min_default: new FormData(mf).get("min") } });
+      S.minDefault = r.min_default; toast("Mínimo atualizado."); await refresh();
+    } catch (er) { toast(er.message, true); }
+  };
 }
 function renderCats() {
   $("#catbox").innerHTML = S.cats.map((c) => `<div class="setting"><div class="l">${esc(c.name)}<small>${c.products} peça(s)</small></div>
@@ -217,7 +252,11 @@ async function renderUsers() {
 
 /* ---------------------------------------------------------------- scan */
 let scanner = null;
-async function stopCamera() { if (scanner) { try { await scanner.stop(); scanner.clear(); } catch {} scanner = null; } }
+async function stopCamera() {
+  if (!scanner) return;
+  try { await scanner.stop(); scanner.clear(); } catch {}
+  scanner = null;
+}
 function scanView() {
   shell(`<h2 class="page">Escanear peça</h2>
     <div id="reader" hidden></div>
@@ -225,8 +264,12 @@ function scanView() {
     <button class="btn block ghost" id="cam">Usar a câmera do celular</button>
     <p class="muted" style="margin-top:14px">Com o leitor de código de barras, basta clicar no campo e ler a peça. Se ela já existir, abre para dar entrada ou saída; se não, abre o cadastro.</p>`);
   const input = $("#code");
-  if (!matchMedia("(pointer: coarse)").matches) input.focus();
-  $("#scanform").onsubmit = (e) => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; handleCode(v); } };
+  if (hasMouse()) input.focus();
+  $("#scanform").onsubmit = (e) => {
+    e.preventDefault();
+    const v = input.value.trim();
+    if (v) { input.value = ""; handleCode(v); }
+  };
   $("#cam").onclick = startCamera;
 }
 async function startCamera() {
@@ -237,7 +280,10 @@ async function startCamera() {
   }
   box.hidden = false; btn.textContent = "Fechar câmera";
   const F = Html5QrcodeSupportedFormats;
-  scanner = new Html5Qrcode("reader", { formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE], useBarCodeDetectorIfSupported: true, verbose: false });
+  scanner = new Html5Qrcode("reader", {
+    formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE],
+    useBarCodeDetectorIfSupported: true, verbose: false,
+  });
   try {
     await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: (w) => ({ width: Math.min(300, w - 20), height: 150 }) },
       async (text) => { beep(); await stopCamera(); handleCode(text); }, () => {});
@@ -258,13 +304,13 @@ async function handleCode(code) {
 function openSheet(html) {
   sheetRoot.innerHTML = `<div class="overlay" data-close><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
   const first = sheetRoot.querySelector("input:not([type=hidden]), button.btn");
-  if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
+  if (first && hasMouse()) first.focus();
 }
 function closeSheet() {
   sheetRoot.innerHTML = "";
   // Na aba Escanear, o leitor USB "digita" no campo: devolve o foco para a próxima leitura.
   const code = $("#code");
-  if (code && !matchMedia("(pointer: coarse)").matches) code.focus();
+  if (code && hasMouse()) code.focus();
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
@@ -280,16 +326,20 @@ function productFields(p = {}) {
     <label class="f"><span>NCM</span><input name="ncm" value="${esc(p.ncm)}" inputmode="numeric"></label></div>
     <label class="f"><span>Mínimo para avisar (vazio = padrão ${S.minDefault})</span><input name="min_qty" type="number" min="0" value="${p.min_qty ?? ""}"></label>`;
 }
-const formBody = (f) => { const d = Object.fromEntries(new FormData(f)); return d; };
 
 function openForm(prefill = {}) {
   openSheet(`<header><h3>Nova peça</h3><button class="x" data-close aria-label="Fechar">×</button></header>
     <form id="newform"><div id="ferr"></div>${productFields(prefill)}
     <label class="f"><span>Quantidade em estoque agora</span><input name="qty" type="number" min="0" value="1"></label>
     <button class="btn block">Cadastrar peça</button></form>`);
-  $("#newform").onsubmit = async (e) => { e.preventDefault();
-    try { const p = await api("/products", { method: "POST", body: formBody(e.target) }); closeSheet(); toast(`${p.name} cadastrada (${p.qty} un.).`); S.tab = S.tab === "scan" ? "scan" : "stock"; await refresh(); }
-    catch (er) { $("#ferr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+  $("#newform").onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const p = await api("/products", { method: "POST", body: formBody(e.target) });
+      closeSheet(); toast(`${p.name} cadastrada (${p.qty} un.).`);
+      S.tab = S.tab === "scan" ? "scan" : "stock"; await refresh();
+    } catch (er) { showError("#ferr", er); }
+  };
 }
 
 async function openProduct(id) {
@@ -297,11 +347,9 @@ async function openProduct(id) {
   try { p = await api("/products/" + id); } catch (e) { toast(e.message, true); return; }
   let type = "out";
   const owner = S.user.role === "dono";
-  const hist = p.movements.map((m) => { const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
-    const lbl = m.type === "in" ? "Entrada" : m.type === "out" ? "Saída" : "Contagem";
-    return `<div class="mv"><div>${lbl}${m.note ? " · " + esc(m.note) : ""}<small>${esc(m.user || "")} · ${fmtDate(m.created_at)}</small></div><div class="d ${cls}">${m.type === "adjust" ? "→ " + m.balance : (m.delta > 0 ? "+" : "") + m.delta}</div></div>`; }).join("");
+  const hist = p.movements.map((m) => moveRow(m, false)).join("");
   openSheet(`<header><div><h3>${esc(p.name)}</h3><span class="muted">${esc([p.category, p.code, p.brand].filter(Boolean).join(" · "))}</span></div><button class="x" data-close aria-label="Fechar">×</button></header>
-    <div class="bigqty"><b>${p.qty}</b><span class="muted">em estoque · mínimo ${p.min_effective}</span> ${p.low ? `<span class="tag ${p.qty === 0 ? "zero" : ""}">${p.qty === 0 ? "Sem estoque" : "Estoque baixo"}</span>` : ""}</div>
+    <div class="bigqty"><b>${p.qty}</b><span class="muted">em estoque · mínimo ${p.min_effective}</span> ${stockTag(p)}</div>
     <div id="merr"></div>
     <div class="seg" role="group" aria-label="Tipo de movimentação">
       <button class="out" data-type="out" aria-pressed="true">Saída</button><button class="in" data-type="in" aria-pressed="false">Entrada</button><button data-type="adjust" aria-pressed="false">Contagem</button></div>
@@ -318,17 +366,31 @@ async function openProduct(id) {
     qty.min = t === "adjust" ? 0 : 1; qty.value = t === "adjust" ? p.qty : 1;
     $("#nlabel").textContent = t === "adjust" ? "Quantidade real contada" : "Observação (opcional)"; };
   sheetRoot.querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
-  sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => { qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); }));
-  go.onclick = async () => { go.disabled = true;
-    try { const r = await api(`/products/${id}/move`, { method: "POST", body: { type, qty: qty.value, note: $("#mnote").value } });
-      closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh(); }
-    catch (e) { $("#merr").innerHTML = `<div class="err">${esc(e.message)}</div>`; go.disabled = false; } };
-  $("#editform").onsubmit = async (e) => { e.preventDefault();
-    try { await api("/products/" + id, { method: "PUT", body: formBody(e.target) }); closeSheet(); toast("Dados salvos."); await refresh(); }
-    catch (er) { $("#merr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+  sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => {
+    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step));
+  }));
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const r = await api(`/products/${id}/move`, { method: "POST", body: { type, qty: qty.value, note: $("#mnote").value } });
+      closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh();
+    } catch (e) { showError("#merr", e); go.disabled = false; }
+  };
+  $("#editform").onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api("/products/" + id, { method: "PUT", body: formBody(e.target) });
+      closeSheet(); toast("Dados salvos."); await refresh();
+    } catch (er) { showError("#merr", er); }
+  };
   const del = $("#del");
-  if (del) del.onclick = async () => { if (!confirm(`Excluir "${p.name}"? O histórico será mantido.`)) return;
-    try { await api("/products/" + id, { method: "DELETE" }); closeSheet(); toast("Peça excluída."); await refresh(); } catch (e) { toast(e.message, true); } };
+  if (del) del.onclick = async () => {
+    if (!confirm(`Excluir "${p.name}"? O histórico será mantido.`)) return;
+    try {
+      await api("/products/" + id, { method: "DELETE" });
+      closeSheet(); toast("Peça excluída."); await refresh();
+    } catch (e) { toast(e.message, true); }
+  };
 }
 
 function openPw() {
@@ -337,8 +399,13 @@ function openPw() {
     <label class="f"><span>Senha atual</span><input name="current" type="password" required autocomplete="current-password"></label>
     <label class="f"><span>Nova senha</span><input name="new" type="password" required minlength="8" autocomplete="new-password"></label>
     <button class="btn block">Salvar</button></form>`);
-  $("#pwform").onsubmit = async (e) => { e.preventDefault();
-    try { await api("/password", { method: "POST", body: formBody(e.target) }); closeSheet(); toast("Senha alterada."); } catch (er) { $("#perr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+  $("#pwform").onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api("/password", { method: "POST", body: formBody(e.target) });
+      closeSheet(); toast("Senha alterada.");
+    } catch (er) { showError("#perr", er); }
+  };
 }
 function openUserForm(reset) {
   openSheet(`<header><h3>${reset ? "Nova senha" : "Novo usuário"}</h3><button class="x" data-close aria-label="Fechar">×</button></header>
@@ -348,9 +415,15 @@ function openUserForm(reset) {
     <label class="f"><span>Senha</span><input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     ${reset ? "" : `<label class="f"><span>Perfil</span><select name="role"><option value="atendente">Atendente</option><option value="dono">Dono (acesso total)</option></select></label>`}
     <button class="btn block">Salvar</button></form>`);
-  $("#uform").onsubmit = async (e) => { e.preventDefault();
-    try { if (reset) await api("/users/" + reset, { method: "PUT", body: formBody(e.target) }); else await api("/users", { method: "POST", body: formBody(e.target) });
-      closeSheet(); toast("Salvo."); renderUsers(); } catch (er) { $("#uerr").innerHTML = `<div class="err">${esc(er.message)}</div>`; } };
+  $("#uform").onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const body = formBody(e.target);
+      if (reset) await api("/users/" + reset, { method: "PUT", body });
+      else await api("/users", { method: "POST", body });
+      closeSheet(); toast("Salvo."); renderUsers();
+    } catch (er) { showError("#uerr", er); }
+  };
 }
 
 /* ---------------------------------------------------------------- events */
@@ -359,12 +432,25 @@ document.addEventListener("click", async (e) => {
   const t = e.target.closest("[data-tab],[data-open],[data-cat],[data-act],[data-close],[data-delcat],[data-resetpw],[data-toggleuser]");
   if (!t) return;
   if (t.hasAttribute("data-close")) { if (t.classList.contains("overlay") && e.target !== t) return; closeSheet(); return; }
-  if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; await loadTabData().catch((er) => toast(er.message, true)); render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) {
+    await stopCamera(); S.tab = t.dataset.tab;
+    await loadTabData().catch((er) => toast(er.message, true));
+    render(); window.scrollTo(0, 0); return;
+  }
   if (t.dataset.open) return openProduct(t.dataset.open);
   if (t.dataset.cat !== undefined) { S.cat = Number(t.dataset.cat); await reloadProducts(); return; }
-  if (t.dataset.delcat) { if (!confirm("Excluir esta categoria?")) return; try { await api("/categories/" + t.dataset.delcat, { method: "DELETE" }); await refresh(); } catch (er) { toast(er.message, true); } return; }
+  if (t.dataset.delcat) {
+    if (!confirm("Excluir esta categoria?")) return;
+    try { await api("/categories/" + t.dataset.delcat, { method: "DELETE" }); await refresh(); }
+    catch (er) { toast(er.message, true); }
+    return;
+  }
   if (t.dataset.resetpw) return openUserForm(t.dataset.resetpw);
-  if (t.dataset.toggleuser) { try { await api("/users/" + t.dataset.toggleuser, { method: "PUT", body: { active: t.dataset.active === "1" } }); renderUsers(); } catch (er) { toast(er.message, true); } return; }
+  if (t.dataset.toggleuser) {
+    try { await api("/users/" + t.dataset.toggleuser, { method: "PUT", body: { active: t.dataset.active === "1" } }); renderUsers(); }
+    catch (er) { toast(er.message, true); }
+    return;
+  }
   switch (t.dataset.act) {
     case "new": return openForm();
     case "more": t.disabled = true;
