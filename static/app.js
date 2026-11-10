@@ -25,13 +25,26 @@ let toastTimer;
 function toast(msg, bad = false) {
   const t = $("#toast");
   t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), bad ? 6000 : 2600); // erro: tempo para ler
 }
+/* Carregando: só aparece se a resposta demorar mais de 300 ms, para não piscar na rede local. */
+let pending = 0, loadingTimer;
+function busy(delta) {
+  pending += delta;
+  clearTimeout(loadingTimer);
+  if (pending > 0) loadingTimer = setTimeout(() => ($("#loading").hidden = false), 300);
+  else $("#loading").hidden = true;
+}
+/* Aviso fixo de conexão: some sozinho quando qualquer pedido volta a funcionar. */
+const setOffline = (off) => { $("#net").hidden = !off; };
 async function api(path, opts = {}) {
   const o = { method: opts.method || "GET", headers: {}, credentials: "same-origin" };
   if (opts.body !== undefined) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(opts.body); }
   let r;
-  try { r = await fetch("/api" + path, o); } catch { throw new Error("Sem conexão com o servidor."); }
+  busy(1);
+  try { r = await fetch("/api" + path, o); } catch { setOffline(true); throw new Error("Sem conexão com o servidor."); }
+  finally { busy(-1); }
+  setOffline(false);
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && S.user) { S.user = null; render(); }
   if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status, data });
@@ -517,6 +530,7 @@ document.addEventListener("click", async (e) => {
     case "more": t.disabled = true;
       try { if (await loadProducts(true)) render(); } catch (er) { toast(er.message, true); t.disabled = false; }
       return;
+    case "retry": t.disabled = true; await refresh(); t.disabled = false; return;
     case "pw": return openPw();
     case "newuser": return openUserForm();
     case "backup": t.disabled = true;

@@ -167,6 +167,12 @@ details.edit[open] summary { margin-bottom: 10px; }
 #toast { position: fixed; left: 50%; bottom: calc(var(--nav-h) + 36px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; pointer-events: none; transition: .2s; z-index: 40; max-width: 92vw; font-weight: 500; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.bad { background: var(--red); }
+#net { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; background: var(--red); color: #fff; font-weight: 500; text-align: center; }
+#net .btn { background: #fff; color: var(--red); }
+#loading { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 31; background: linear-gradient(90deg, transparent, var(--blue), transparent) no-repeat; background-size: 40% 100%; animation: loading 1s linear infinite; }
+#net[hidden], #loading[hidden] { display: none; }
+@keyframes loading { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) { #loading { animation: none; background: var(--blue); } }
 
 .setting { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .setting:first-child { border-top: 0; }
