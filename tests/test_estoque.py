@@ -80,6 +80,20 @@ def test_filtro_low_e_resumo_contam_os_mesmos_alertas(owner):
 
 
 # ---------------------------------------------------------------- cadastro
+def test_quantidade_inicial_invalida_e_recusada_e_nada_e_cadastrado(owner):
+    for bad in (-1, "abc", "2.5", [3]):
+        r = owner.post("/api/products", json={"name": f"Peça {bad}", "qty": bad})
+        assert r.status_code == 400, bad
+        assert "Quantidade inicial" in r.get_json()["error"]
+    assert owner.get("/api/products").get_json() == []
+
+
+def test_quantidade_inicial_vazia_cadastra_com_zero(owner):
+    assert new_product(owner, name="Sem qty", qty=None)["qty"] == 0
+    assert new_product(owner, name="Qty vazia", qty="")["qty"] == 0
+    assert new_product(owner, name="Qty texto", qty="3")["qty"] == 3
+
+
 def test_codigo_de_barras_duplicado_e_recusado(owner):
     new_product(owner, barcode="7891234567895")
     r = owner.post("/api/products", json={"name": "Outra", "barcode": "7891234567895"})

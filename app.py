@@ -361,7 +361,10 @@ def create_product():
     f, e = read_product_fields(d)
     if e:
         return err(e)
-    initial = to_int(d.get("qty"), 0)
+    qty_raw = d.get("qty")
+    initial = 0 if qty_raw in (None, "") else to_int(qty_raw)
+    if initial is None:
+        return err("Quantidade inicial inválida: informe um número inteiro, 0 ou mais.")
     try:
         cur = db().execute("""INSERT INTO products(barcode,code,name,category_id,ncm,brand,qty,min_qty,created_at)
                               VALUES (:barcode,:code,:name,:category_id,:ncm,:brand,0,:min_qty,:now)""",
