@@ -4,7 +4,7 @@
 const S = {
   user: null, setupNeeded: false, setupHere: false, minDefault: 2,
   tab: "stock", cats: [], products: [], summary: null, moves: [],
-  low: [], q: "", cat: 0, loaded: false,
+  low: [], q: "", cat: 0, hasMore: false,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -37,6 +37,7 @@ async function api(path, opts = {}) {
   if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status });
   return data;
 }
+const formBody = (f) => Object.fromEntries(new FormData(f));
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [, m, dd] = d.split("-"); return `${dd}/${m} ${t.slice(0, 5)}`; };
 function beep() {
   try { const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); setTimeout(() => { o.stop(); c.close(); }, 110); } catch {}
@@ -62,7 +63,7 @@ async function loadProducts(more = false) {
 }
 async function loadAll() {
   const [, summary, cats] = await Promise.all([loadProducts(), api("/summary"), api("/categories")]);
-  S.summary = summary; S.cats = cats; S.loaded = true;
+  S.summary = summary; S.cats = cats;
 }
 /* Busca e filtro de categoria só mudam a lista: resumo e categorias continuam valendo. */
 async function reloadProducts() {
@@ -93,8 +94,7 @@ function authView() {
     </form></div>`;
   $("#auth").onsubmit = async (e) => {
     e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.target));
-    try { await api(setup ? "/setup" : "/login", { method: "POST", body }); await boot(); }
+    try { await api(setup ? "/setup" : "/login", { method: "POST", body: formBody(e.target) }); await boot(); }
     catch (er) { $("#autherr").innerHTML = `<div class="err">${esc(er.message)}</div>`; }
   };
 }
@@ -106,10 +106,13 @@ function setupElsewhereView() {
       em <b>https://localhost:8443</b>, para criar o usuário do dono. Depois é só entrar por aqui.</div></div>`;
 }
 
+/* Abas na ordem da barra de navegação: [chave, ícone, rótulo]. */
+const TABS = [
+  ["stock", "box", "Estoque"], ["alerts", "alert", "Alertas"], ["scan", "scan", "Escanear"],
+  ["history", "clock", "Histórico"], ["more", "menu", "Mais"],
+];
 function shell(inner) {
-  const tabs = [["stock", "box", "Estoque"], ["alerts", "alert", "Alertas"], ["scan", "scan", "Escanear"], ["history", "clock", "Histórico"], ["more", "menu", "Mais"]];
-  const order = ["stock", "alerts", "scan", "history", "more"];
-  const nav = order.map((k) => { const [, ic, label] = tabs.find((t) => t[0] === k);
+  const nav = TABS.map(([k, ic, label]) => {
     const cur = S.tab === k ? ' aria-current="page"' : "";
     if (k === "scan") return `<button class="scan" data-tab="scan"${cur}><span class="disc">${svg(ic)}</span><b>${label}</b></button>`;
     const dot = k === "alerts" && lowCount() ? `<span class="dot">${lowCount()}</span>` : "";
@@ -280,7 +283,6 @@ function productFields(p = {}) {
     <label class="f"><span>NCM</span><input name="ncm" value="${esc(p.ncm)}" inputmode="numeric"></label></div>
     <label class="f"><span>Mínimo para avisar (vazio = padrão ${S.minDefault})</span><input name="min_qty" type="number" min="0" value="${p.min_qty ?? ""}"></label>`;
 }
-const formBody = (f) => { const d = Object.fromEntries(new FormData(f)); return d; };
 
 function openForm(prefill = {}) {
   openSheet(`<header><h3>Nova peça</h3><button class="x" data-close aria-label="Fechar">×</button></header>
