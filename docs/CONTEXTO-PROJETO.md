@@ -120,6 +120,8 @@ exato do sistema de notas.
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
 | `tls.py` | ~80 | Certificado https autoassinado nas regras da Apple; refeito quando vence, muda o IP ou está fora das regras |
 | `paths.py` | ~6 | Onde ficam os dados (`MAXX_DATA`, `estoque.db`), sem importar o Flask |
+| `inputs.py` | ~80 | Leitura e validação dos dados recebidos: tipo, tamanho, inteiros com limite, código de barras |
+| `logs.py` | ~40 | Log em `data/logs/sistema.log` (1 MB × 5, sem cores) e no console |
 | `single_instance.py` | ~30 | Trava `data/sistema.lock`: um sistema aberto por pasta de dados |
 | `server.py` | ~30 | Servidor web (Werkzeug): handshake https na thread de cada conexão e tempo limite de 30 s |
 | `run.py` | ~62 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
@@ -132,7 +134,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~1300 | 132 testes pytest da API |
+| `tests/` | ~1500 | 164 testes pytest da API |
 | `e2e/` | ~260 | 11 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
@@ -249,6 +251,13 @@ settings   (key, value)                             -- min_default = '2'
 - **Corridas:** excluir categoria, desativar usuário (sempre sobra um dono ativo), primeiro acesso, reenvio de
   movimentação e contagem com saldo visto rodam em `BEGIN IMMEDIATE` (`tests/test_corridas.py`,
   `tests/test_idempotencia.py`).
+- **Dados recebidos:** corpo precisa ser objeto JSON de até 64 KB (413 acima); textos até 200 caracteres (observação
+  500); tipo errado dá 400 com mensagem, nunca 500 (`inputs.py`, `tests/test_validacao.py`).
+- **Erros e log:** 500 responde JSON genérico, e o traceback, os acessos e o backup vão para `data/logs/sistema.log`.
+  Rotas `/api` inexistentes respondem 404 em JSON.
+- **Senha:** login de usuário inexistente também calcula o hash (não revela quem existe); errar 5 vezes a senha
+  atual bloqueia a troca por 5 min.
+- **Dependências:** `pip-audit` sem vulnerabilidade conhecida em 10/11/2026; o CI confere a cada PR.
 - **Escape de HTML** com `esc()` em todo texto vindo do usuário no `app.js`.
 - **CSRF:** mitigado por SameSite=Lax mais o corpo JSON (`get_json` exige `Content-Type: application/json`).
 
@@ -327,7 +336,9 @@ a97e956 Sistema de estoque Maxx Auto Ar
    com uma conexão parada (BE-01, PR #14); não abrir em http sem certificado, teto de quantidade, contagem só do
    dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #16). Fase 2: reenvio de
    movimentação, contagem com saldo visto, pasta na nuvem, instância única e corridas (BE-05, 06, 07, 09, 12, 13 e
-   14, PR da fase 2). A tela passa a usar `request_id` e `expected` nos PRs da sessão de frontend.
+   14, PR #17). A tela passa a usar `request_id` e `expected` nos PRs da sessão de frontend. Fase 3: validação dos
+   dados recebidos, mensagem de categoria, enumeração de usuários, limites de tamanho, log em arquivo, refatorações
+   e `pip-audit` no CI (BE-10, 11, 15, 16, 17 e 18, PR da fase 3).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -414,12 +425,12 @@ para o porte.
 | BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Corrigido (fase 2) |
 | BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Corrigido (fase 2) |
 | BE-14 | Baixa | Corrida no primeiro acesso | Corrigido (fase 2) |
-| BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Fase 3 |
-| BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Fase 3 |
-| BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Fase 3 |
-| BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Fase 3 |
-| BE-17 | Baixa | Erros só no console; 500 em HTML | Fase 3 |
-| BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Fase 3 |
+| BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Corrigido (fase 3) |
+| BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Corrigido (fase 3) |
+| BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Corrigido (fase 3) |
+| BE-16 | Baixa | Sem limite de tamanho do corpo e dos campos | Corrigido (fase 3) |
+| BE-17 | Baixa | Erros só no console; 500 em HTML | Corrigido (fase 3) |
+| BE-18 | Baixa | Validação de usuário repetida; `app.py` grande | Corrigido (fase 3): `read_new_user` e `inputs.py` |
 
 ---
 
@@ -442,9 +453,9 @@ para o porte.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 132 testes da API, ~32 s
+pytest -q            # 164 testes da API, ~45 s
 pytest -q e2e        # 11 testes de interface, ~18 s
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -490,7 +501,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py serv
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 132 passed).
+2. Rodar `pytest -q` (esperado: 164 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
