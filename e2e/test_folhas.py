@@ -107,3 +107,37 @@ def test_fechar_a_folha_devolve_o_foco_a_peca_que_a_abriu(page, api):
     page.locator("#mgo").click()
     expect(page.locator("#toast")).to_contain_text("agora 4 em estoque")
     expect(page.locator(f'[data-open="{p["id"]}"]')).to_be_focused()
+
+
+# ---------------------------------------------------------------- reenvio e contagem concorrente (BE-05, BE-06)
+def test_reenviar_depois_de_perder_a_resposta_nao_grava_duas_vezes(page, api):
+    p = api.product(qty=5)
+    page.goto("/")
+    open_product(page, p)
+
+    def lost_answer(route):  # o servidor grava, mas a resposta não chega ao navegador
+        route.fetch()
+        route.abort()
+    page.route("**/move", lost_answer, times=1)
+    page.locator("#mgo").click()
+    expect(page.locator("#merr .err")).to_contain_text("Sem conexão")
+
+    page.locator("#mgo").click()  # tenta de novo: o servidor reconhece o mesmo pedido
+    expect(page.locator("#toast")).to_contain_text("agora 4 em estoque")
+    assert page.request.get(f"/api/products/{p['id']}").json()["qty"] == 4
+
+
+def test_contagem_avisa_quando_o_estoque_mudou_enquanto_contava(page, api):
+    p = api.product(qty=5)
+    page.goto("/")
+    open_product(page, p)
+    page.locator('[data-type="adjust"]').click()
+    page.request.post(f"/api/products/{p['id']}/move", data={"type": "out", "qty": 1})  # outra pessoa vendeu uma
+
+    page.fill("#mqty", "7")
+    page.locator("#mgo").click()
+    expect(page.locator("#merr .err")).to_contain_text("mudou de 5 para 4")
+    expect(page.locator(".bigqty b")).to_have_text("4")
+
+    page.locator("#mgo").click()  # conferiu e salva de novo
+    expect(page.locator("#toast")).to_contain_text("agora 7 em estoque")

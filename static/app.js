@@ -34,9 +34,11 @@ async function api(path, opts = {}) {
   try { r = await fetch("/api" + path, o); } catch { throw new Error("Sem conexão com o servidor."); }
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && S.user) { S.user = null; render(); }
-  if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status, data });
   return data;
 }
+/* Identificador de um pedido, para o servidor reconhecer o reenvio. getRandomValues funciona também em http. */
+const newRequestId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 /* Sem tela de toque: dá para pôr o foco num campo sem abrir o teclado do celular. */
 const hasMouse = () => !matchMedia("(pointer: coarse)").matches;
 const formBody = (f) => Object.fromEntries(new FormData(f));
@@ -402,22 +404,31 @@ async function openProduct(id) {
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
       <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
-  const qty = $("#mqty"), go = $("#mgo");
-  const setType = (t) => { type = t;
+  const qty = $("#mqty"), note = $("#mnote"), go = $("#mgo");
+  // Um id por intenção: reenviar a mesma depois de "Sem conexão" não grava de novo; mudar o pedido gera outro id.
+  let requestId = newRequestId();
+  const changed = () => (requestId = newRequestId());
+  const setType = (t) => { type = t; changed();
     sheetRoot.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.type === t));
     go.textContent = t === "in" ? "Registrar entrada" : t === "out" ? "Registrar saída" : "Salvar contagem";
     qty.min = t === "adjust" ? 0 : 1; qty.value = t === "adjust" ? p.qty : 1;
     $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; };
   sheetRoot.querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
   sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => {
-    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step));
+    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); changed();
   }));
+  qty.oninput = note.oninput = changed;
   go.onclick = async () => {
     go.disabled = true;
+    const body = { type, qty: qty.value, note: note.value, request_id: requestId };
+    if (type === "adjust") body.expected = p.qty; // o servidor recusa se o saldo mudou enquanto se contava
     try {
-      const r = await api(`/products/${id}/move`, { method: "POST", body: { type, qty: qty.value, note: $("#mnote").value } });
+      const r = await api(`/products/${id}/move`, { method: "POST", body });
       closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh();
-    } catch (e) { showError("#merr", e); go.disabled = false; }
+    } catch (e) {
+      if (e.status === 409 && Number.isInteger(e.data.qty)) { p.qty = e.data.qty; $(".bigqty b").textContent = p.qty; changed(); }
+      showError("#merr", e); go.disabled = false;
+    }
   };
   onSubmit($("#editform"), async (f) => {
     try {
