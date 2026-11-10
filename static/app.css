@@ -112,6 +112,16 @@ button.stat.warn b { color: #8a5a00; }
 .item .t { flex: 1; min-width: 0; }
 .item .t b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .item .t small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .c-code, .item .c-brand, .cols { display: none; }
+/* Computador com tela larga: código e marca viram colunas alinhadas, com cabeçalho. */
+@media (min-width: 1200px) {
+  main > .wrap { max-width: 1100px; }
+  .item, .cols { display: grid; grid-template-columns: minmax(0, 1fr) 170px 150px 90px; gap: 16px; align-items: center; }
+  .cols { padding: 0 14px 0 20px; margin: 8px 0 -4px; font: 600 .8rem var(--font-b); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .cols span:last-child { text-align: center; }
+  .item .c-code, .item .c-brand { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .item .t .meta { display: none; }
+}
 .qty { text-align: center; min-width: 54px; }
 .qty b { display: block; font: 700 1.6rem/1 var(--font-h); }
 .qty small { font-size: .7rem; color: var(--muted); }

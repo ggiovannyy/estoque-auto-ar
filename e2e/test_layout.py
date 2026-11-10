@@ -36,3 +36,34 @@ def test_nova_peca_fica_na_linha_da_busca_sem_cobrir_a_lista(browser, base_url, 
     nb, sb = new.bounding_box(), search.bounding_box()
     assert abs((nb["y"] + nb["height"] / 2) - (sb["y"] + sb["height"] / 2)) < 4, "não está na linha da busca"
     assert nb["height"] >= 44 and nb["x"] + nb["width"] <= width
+
+
+def test_tela_larga_mostra_a_lista_em_colunas(page, api):
+    from dados import unique
+    tag = unique("Colunas")
+    a = api.product(name=f"{tag} A", code="FC-1020", brand="Tecfil")
+    b = api.product(name=f"{tag} B longo " + "x" * 40, code="VE-33", brand="Mahle")
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto("/")
+    with page.expect_response(lambda r: "/api/products?" in r.url):
+        page.fill("#q", tag)
+    expect(page.locator(".cols")).to_be_visible()
+    codes = [page.locator(f'[data-open="{p["id"]}"] .c-code') for p in (a, b)]
+    expect(codes[0]).to_have_text("FC-1020")
+    expect(page.locator(f'[data-open="{b["id"]}"] .c-brand')).to_have_text("Mahle")
+    xs = {round(c.bounding_box()["x"]) for c in codes}
+    assert len(xs) == 1, f"a coluna de código não está alinhada: {xs}"
+    header_x = page.locator(".cols span", has_text="Código").bounding_box()["x"]
+    assert abs(header_x - xs.pop()) < 2
+    assert page.locator("main .wrap").bounding_box()["width"] > 1000
+
+
+def test_celular_mostra_a_lista_compacta(phone, api):
+    p = api.product(code="FC-1020", brand="Tecfil")
+    phone.goto("/")
+    with phone.expect_response(lambda r: "/api/products?" in r.url):
+        phone.fill("#q", p["name"])
+    row = phone.locator(f'[data-open="{p["id"]}"]')
+    expect(row.locator(".meta")).to_have_text("FC-1020 · Tecfil")
+    expect(row.locator(".c-code")).to_be_hidden()
+    expect(phone.locator(".cols")).to_be_hidden()

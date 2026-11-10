@@ -175,10 +175,13 @@ function itemRow(p) {
   const cls = p.qty === 0 ? "zero" : p.low ? "low" : "";
   const meta = [p.code, p.brand].filter(Boolean).join(" · ");
   return `<button class="item ${cls}" data-open="${p.id}">
-    <div class="t"><b>${esc(p.name)}</b><small>${esc(meta || p.barcode || "sem código")}</small>
+    <div class="t"><b>${esc(p.name)}</b><small class="meta">${esc(meta || p.barcode || "sem código")}</small>
       ${stockTag(p)}</div>
+    <span class="c-code">${esc(p.code || p.barcode || "—")}</span><span class="c-brand">${esc(p.brand || "—")}</span>
     <div class="qty"><b>${p.qty}</b><small>mín. ${p.min_effective}</small></div></button>`;
 }
+/* Cabeçalho das colunas da lista: só aparece em tela larga (computador), onde código e marca viram colunas. */
+const LIST_HEADER = '<div class="cols" aria-hidden="true"><span>Peça</span><span>Código</span><span>Marca</span><span>Estoque</span></div>';
 
 function stockView() {
   const s = S.summary || { items: 0, units: 0, low: 0 };
@@ -195,7 +198,7 @@ function stockView() {
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
     <div class="searchrow"><div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
       <button class="btn new" data-act="new" aria-label="Nova peça"><span aria-hidden="true">+</span><span class="lbl">Nova peça</span></button></div>
-    <div class="chips">${chips}</div>${list}
+    <div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
     ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`);
 }
 
@@ -203,7 +206,7 @@ function alertsView() {
   const low = S.low; // lista completa vinda do servidor, ja ordenada por quantidade
   shell(`<h2 class="page">Alertas de estoque</h2>
     <p class="muted" style="margin-top:-6px">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
-    ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
+    ${low.length ? `${LIST_HEADER}<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
 }
 
 const MOVE_LABEL = { in: "Entrada", out: "Saída", adjust: "Contagem" };
