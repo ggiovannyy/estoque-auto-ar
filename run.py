@@ -10,6 +10,7 @@ import socket
 import sys
 
 from backup import BackupScheduler, synced_folder
+from logs import setup_logging
 from paths import DATA, DB_PATH
 from server import make_server
 from single_instance import lock_data_dir
@@ -45,6 +46,7 @@ def main():
         print(f"  ATENÇÃO: a pasta de dados ({DATA}) está dentro de {cloud}, que é sincronizada com a nuvem.")
         print("  O banco pode corromper com a sincronização e a chave de login vai para a nuvem.")
         print("  Instale o sistema fora dela, num caminho curto (ex.: C:\\MaxxEstoque).")
+    log_file = setup_logging(DATA)  # antes do app: senão o Flask cria o próprio handler e duplica as linhas
     from app import app
     ips = lan_ips()
     use_https = not a.http
@@ -65,6 +67,7 @@ def main():
         print("  No 1º acesso o celular avisa 'conexão não segura'. Para continuar:")
         print("    Android: Avançado > Continuar.  iPhone: Mostrar detalhes > visitar este site.")
     print(f"  Backup diário em: {app.config['BACKUP_DIR']}")
+    print(f"  Registro de erros em: {log_file}")
     print("  Para parar: Ctrl+C\n")
     BackupScheduler(DB_PATH, app.config["BACKUP_DIR"]).start()
     server = make_server(app, "0.0.0.0", port, cert_files=(CERT, KEY) if use_https else None)

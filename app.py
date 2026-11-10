@@ -13,9 +13,12 @@ from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, g, jsonify, request, send_from_directory, session
+from werkzeug.exceptions import HTTPException, InternalServerError, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
+from inputs import (MAX_NOTE, MAX_QTY, QTY_HINT, BadInput, clean, json_body, normalize_barcode, read_min, secret,
+                    text, to_int)
 from migrations import migrate
 from paths import DATA, DB_PATH
 from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, password_mark
@@ -23,16 +26,16 @@ from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error, 
 os.makedirs(DATA, exist_ok=True)
 
 DEFAULT_MIN = 2  # aviso de estoque baixo: quantidade <= 2 (configuravel)
-# Teto de quantidade: o leitor USB "digita" o codigo de barras e um Enter no campo em foco, inclusive no de quantidade.
-MAX_QTY = 100_000
-QTY_HINT = "Se o leitor estava no campo de quantidade, o código de barras pode ter entrado ali."
 
 # O primeiro acesso cria o dono: so pode ser feito no computador onde o sistema roda,
 # para ninguem no Wi-Fi da oficina se cadastrar como dono antes dele.
 LOCAL_ADDRESSES = {"127.0.0.1", "::1"}
 
-user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
+user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario (e por usuario logado, na troca de senha)
 ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
+# Usuario que nao existe tambem passa pelo calculo do hash: sem isso a resposta sai bem mais rapido e revela
+# quais usuarios existem.
+DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_hex(16))
 
 
 def get_secret():
@@ -49,6 +52,7 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = get_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
+                  MAX_CONTENT_LENGTH=64 * 1024,  # a maior requisição da tela tem poucas centenas de bytes
                   BACKUP_DIR=str(default_backup_dir(DATA)))
 
 
@@ -88,6 +92,33 @@ def min_default():
 
 def err(msg, code=400):
     return jsonify(error=msg), code
+
+
+@app.errorhandler(BadInput)
+def bad_input(e):
+    return err(str(e))
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(_):
+    return err("Os dados enviados são grandes demais.", 413)
+
+
+@app.errorhandler(InternalServerError)
+def internal_error(_):
+    # O Flask já registrou o traceback no log; quem usa o sistema vê só uma mensagem genérica.
+    return err("Erro inesperado no servidor. Tente de novo; se continuar, avise o responsável.", 500)
+
+
+API_HTTP_ERRORS = {404: "Endereço não encontrado.", 405: "Método não permitido."}
+
+
+@app.errorhandler(HTTPException)
+def http_error(e):
+    """Na API, os erros do próprio Flask (rota inexistente, método errado...) também respondem em JSON."""
+    if request.path.startswith("/api/"):
+        return err(API_HTTP_ERRORS.get(e.code, "Requisição inválida."), e.code)
+    return e
 
 
 USER_FIELDS = ("id", "name", "username", "role", "active")
@@ -139,34 +170,6 @@ def product_dict(row):
     return d
 
 
-def clean(v):
-    v = (v or "").strip() if isinstance(v, str) else v
-    return v or None
-
-
-def normalize_barcode(v):
-    """A câmera pode ler um UPC-A (12 dígitos) e o leitor USB o mesmo código como EAN-13 (com um 0
-    na frente). Grava e busca sempre com 13 dígitos para os dois acharem a mesma peça."""
-    code = clean(v)
-    if code and len(code) == 12 and code.isascii() and code.isdigit():
-        return "0" + code
-    return code
-
-
-def to_int(v, default=None, minimum=0, maximum=None):
-    try:
-        n = int(v)
-    except (TypeError, ValueError):
-        return default
-    return n if n >= minimum and (maximum is None or n <= maximum) else default
-
-
-def read_min(v):
-    """Mínimo para o alerta: (valor, erro)."""
-    n = to_int(v, maximum=MAX_QTY)
-    return (n, None) if n is not None else (None, f"Mínimo inválido: informe um número inteiro de 0 a {MAX_QTY}.")
-
-
 # ---------------------------------------------------------------- pages
 @app.get("/")
 def index():
@@ -198,6 +201,16 @@ def state():
                    min_default=min_default())
 
 
+def read_new_user(d):
+    """Usuário novo (primeiro acesso ou cadastro pelo dono): ((nome, usuário, hash da senha), erro)."""
+    name, username, pw = text(d, "name"), text(d, "username"), secret(d, "password")
+    if not (name and username):
+        return None, "Informe nome e usuário."
+    if error := password_error(pw):
+        return None, error
+    return (name, username.lower(), generate_password_hash(pw)), None
+
+
 def users_exist():
     return db().execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
 
@@ -208,34 +221,34 @@ def setup():
         return err("O sistema já foi configurado.", 403)
     if request.remote_addr not in LOCAL_ADDRESSES:
         return err("Faça o primeiro acesso no computador onde o sistema está instalado.", 403)
-    d = request.get_json(silent=True) or {}
-    name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
-    if not (name and username):
-        return err("Informe nome e usuário.")
-    if error := password_error(pw):
+    user, error = read_new_user(json_body())
+    if error:
         return err(error)
-    pw_hash = generate_password_hash(pw)
     db().execute("BEGIN IMMEDIATE")  # dois primeiros acessos ao mesmo tempo: o segundo espera e é recusado
     if users_exist():
         db().rollback()
         return err("O sistema já foi configurado.", 403)
-    cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')",
-                       (name, username.lower(), pw_hash))
+    cur = db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,'dono')", user)
     db().commit()
-    start_session(cur.lastrowid, pw_hash)
+    start_session(cur.lastrowid, user[2])
     return jsonify(ok=True)
+
+
+def too_many_attempts(wait):
+    return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
 
 
 @app.post("/api/login")
 def login():
-    d = request.get_json(silent=True) or {}
-    username = (d.get("username") or "").strip().lower()
+    d = json_body()
+    username = (text(d, "username") or "").lower()
     ip, user_key = request.remote_addr, (request.remote_addr, username)
     wait = max(ip_throttle.retry_after(ip), user_throttle.retry_after(user_key))
     if wait:
-        return err(f"Muitas tentativas de senha. Tente de novo em {math.ceil(wait / 60)} min.", 429)
+        return too_many_attempts(wait)
     u = db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
-    if not u or not u["active"] or not check_password_hash(u["password_hash"], d.get("password") or ""):
+    password_ok = check_password_hash(u["password_hash"] if u else DUMMY_PASSWORD_HASH, secret(d, "password"))
+    if not u or not u["active"] or not password_ok:
         ip_throttle.failure(ip)
         user_throttle.failure(user_key)
         return err("Usuário ou senha incorretos.", 401)
@@ -263,7 +276,7 @@ def categories():
 @app.post("/api/categories")
 @login_required()
 def add_category():
-    name = clean((request.get_json(silent=True) or {}).get("name"))
+    name = text(json_body(), "name")
     if not name:
         return err("Informe o nome da categoria.")
     try:
@@ -343,20 +356,25 @@ def product_detail(pid):
     return jsonify(d)
 
 
+def integrity_error(e, duplicate_msg):
+    """Mensagem para o IntegrityError de cadastro/edição de peça: categoria que não existe ou código repetido."""
+    return err("Categoria não encontrada." if "FOREIGN KEY" in str(e) else duplicate_msg)
+
+
 def read_product_fields(d):
-    name = clean(d.get("name"))
+    name = text(d, "name")
     if not name:
         return None, "Informe o nome da peça."
     min_qty, error = read_min(d["min_qty"]) if d.get("min_qty") not in (None, "") else (None, None)
     if error:
         return None, error
     return {
-        "barcode": normalize_barcode(d.get("barcode")),
-        "code": clean(d.get("code")),
+        "barcode": normalize_barcode(text(d, "barcode")),
+        "code": text(d, "code"),
         "name": name,
         "category_id": to_int(d.get("category_id")),
-        "ncm": clean(d.get("ncm")),
-        "brand": clean(d.get("brand")),
+        "ncm": text(d, "ncm"),
+        "brand": text(d, "brand"),
         "min_qty": min_qty,
     }, None
 
@@ -394,7 +412,7 @@ def record_move(pid, mtype, qty, note, uid, request_id=None):
 @app.post("/api/products")
 @login_required()
 def create_product():
-    d = request.get_json(silent=True) or {}
+    d = json_body()
     f, e = read_product_fields(d)
     if e:
         return err(e)
@@ -410,24 +428,25 @@ def create_product():
         if initial:
             record_move(pid, "in", initial, "Estoque inicial", g.user["id"])
         db().commit()
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
         db().rollback()
-        return err("Já existe uma peça com esse código de barras.")
+        return integrity_error(e, "Já existe uma peça com esse código de barras.")
     return jsonify(product_dict(fetch_product(pid=pid))), 201
 
 
 @app.put("/api/products/<int:pid>")
 @login_required()
 def update_product(pid):
-    f, e = read_product_fields(request.get_json(silent=True) or {})
+    f, e = read_product_fields(json_body())
     if e:
         return err(e)
     try:
         db().execute("""UPDATE products SET barcode=:barcode, code=:code, name=:name, category_id=:category_id,
                         ncm=:ncm, brand=:brand, min_qty=:min_qty WHERE id=:id AND active=1""", {**f, "id": pid})
         db().commit()
-    except sqlite3.IntegrityError:
-        return err("Já existe outra peça com esse código de barras.")
+    except sqlite3.IntegrityError as e:
+        db().rollback()
+        return integrity_error(e, "Já existe outra peça com esse código de barras.")
     r = fetch_product(pid=pid)
     return jsonify(product_dict(r)) if r else err("Peça não encontrada.", 404)
 
@@ -444,7 +463,7 @@ def delete_product(pid):
 @app.post("/api/products/<int:pid>/move")
 @login_required()
 def move(pid):
-    d = request.get_json(silent=True) or {}
+    d = json_body()
     mtype = d.get("type")
     if mtype not in ("in", "out", "adjust"):
         return err("Tipo de movimentação inválido.")
@@ -471,7 +490,7 @@ def move(pid):
             db().rollback()
             return jsonify(error=f"O estoque mudou de {expected} para {row['qty']} enquanto você contava. "
                                  "Confira e salve de novo.", qty=row["qty"]), 409
-    new, e = record_move(pid, mtype, qty, clean(d.get("note")), g.user["id"], request_id)
+    new, e = record_move(pid, mtype, qty, text(d, "note", MAX_NOTE), g.user["id"], request_id)
     if e:
         db().rollback()
         return err(e)
@@ -522,7 +541,7 @@ def export_csv():
 @app.put("/api/settings")
 @login_required(owner=True)
 def set_settings():
-    n, error = read_min((request.get_json(silent=True) or {}).get("min_default"))
+    n, error = read_min(json_body().get("min_default"))
     if error:
         return err(error)
     db().execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('min_default', ?)", (str(n),))
@@ -562,16 +581,13 @@ def users():
 @app.post("/api/users")
 @login_required(owner=True)
 def add_user():
-    d = request.get_json(silent=True) or {}
-    name, username, pw = clean(d.get("name")), clean(d.get("username")), d.get("password") or ""
-    role = "dono" if d.get("role") == "dono" else "atendente"
-    if not (name and username):
-        return err("Informe nome e usuário.")
-    if error := password_error(pw):
+    d = json_body()
+    user, error = read_new_user(d)
+    if error:
         return err(error)
+    role = "dono" if d.get("role") == "dono" else "atendente"
     try:
-        db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)",
-                     (name, username.lower(), generate_password_hash(pw), role))
+        db().execute("INSERT INTO users(name,username,password_hash,role) VALUES (?,?,?,?)", (*user, role))
         db().commit()
     except sqlite3.IntegrityError:
         return err("Esse usuário já existe.")
@@ -581,15 +597,18 @@ def add_user():
 @app.put("/api/users/<int:uid>")
 @login_required(owner=True)
 def edit_user(uid):
-    d = request.get_json(silent=True) or {}
-    deactivate = "active" in d and not d["active"]
+    d = json_body()
+    if "active" in d and not isinstance(d["active"], bool):
+        raise BadInput("O campo active precisa ser verdadeiro ou falso.")
+    deactivate = d.get("active") is False
+    new_pw = secret(d, "password")
     if deactivate and uid == g.user["id"]:
         return err("Você não pode desativar o próprio usuário.")
     pw_hash = None
-    if d.get("password"):
-        if error := password_error(d["password"]):
+    if new_pw:
+        if error := password_error(new_pw):
             return err(error)
-        pw_hash = generate_password_hash(d["password"])
+        pw_hash = generate_password_hash(new_pw)
     db().execute("BEGIN IMMEDIATE")  # dois donos mexendo ao mesmo tempo: um espera o outro
     if deactivate and not db().execute("SELECT 1 FROM users WHERE role='dono' AND active=1 AND id<>?",
                                        (uid,)).fetchone():
@@ -608,13 +627,19 @@ def edit_user(uid):
 @app.post("/api/password")
 @login_required()
 def change_password():
-    d = request.get_json(silent=True) or {}
+    d = json_body()
+    current, new_pw = secret(d, "current"), secret(d, "new")
+    key = ("troca de senha", g.user["id"])  # com um cookie roubado, nao da para chutar a senha atual sem limite
+    if wait := user_throttle.retry_after(key):
+        return too_many_attempts(wait)
     u = db().execute("SELECT password_hash FROM users WHERE id=?", (g.user["id"],)).fetchone()
-    if not check_password_hash(u["password_hash"], d.get("current") or ""):
+    if not check_password_hash(u["password_hash"], current):
+        user_throttle.failure(key)
         return err("Senha atual incorreta.")
-    if error := password_error(d.get("new")):
+    user_throttle.success(key)
+    if error := password_error(new_pw):
         return err(error)
-    pw_hash = generate_password_hash(d["new"])
+    pw_hash = generate_password_hash(new_pw)
     db().execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, g.user["id"]))
     db().commit()
     session["pw"] = password_mark(pw_hash)  # este aparelho continua logado; os outros saem

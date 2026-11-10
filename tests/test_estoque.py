@@ -224,3 +224,12 @@ def test_saldo_visto_invalido_e_recusado(owner):
     p = new_product(owner, qty=5)
     assert move(owner, p["id"], "adjust", 1, expected="abc").status_code == 400
     assert qty_of(owner, p["id"]) == 5
+
+
+def test_categoria_inexistente_tem_mensagem_propria(owner):
+    r = owner.post("/api/products", json={"name": "Peça", "category_id": 9999})
+    assert r.status_code == 400 and "Categoria" in r.get_json()["error"]
+    p = new_product(owner)
+    r = owner.put(f"/api/products/{p['id']}", json={"name": "Outro nome", "category_id": 9999})
+    assert r.status_code == 400 and "Categoria" in r.get_json()["error"]
+    assert owner.get(f"/api/products/{p['id']}").get_json()["name"] == p["name"]

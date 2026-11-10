@@ -31,7 +31,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py tests/ e2e/
+      - run: python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
       - run: python -m pytest -q
 
   interface:
@@ -53,6 +53,19 @@ jobs:
         with:
           name: log-do-servidor
           path: e2e-tmp/**/servidor.log
+
+  dependencias:
+    name: Dependências sem falha conhecida
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.14"
+      - run: pip install pip-audit==2.10.1
+      - name: Confere as versões fixadas contra o banco de vulnerabilidades do PyPI
+        # Falha quando sai uma vulnerabilidade de uma versão que a oficina usa: hora de atualizar e testar.
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
 
   bat-crlf:
     name: .bat com CRLF

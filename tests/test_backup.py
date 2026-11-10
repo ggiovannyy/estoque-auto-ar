@@ -1,4 +1,5 @@
 """Cópias de segurança automáticas do banco."""
+import logging
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -121,10 +122,11 @@ def test_repete_depois_de_24_horas_e_limpa_as_antigas(scheduler):
     assert len(list(s.dest_dir.glob("estoque-*.db"))) == 3
 
 
-def test_erro_no_backup_nao_derruba_o_sistema(tmp_path, capsys):
+def test_erro_no_backup_nao_derruba_o_sistema_e_fica_no_log(tmp_path, caplog):
     s = backup.BackupScheduler(tmp_path / "nao-existe" / "estoque.db", tmp_path / "bk", keep=3, clock=lambda: T0)
-    assert s.run_if_due() is None
-    assert "Falha no backup" in capsys.readouterr().out
+    with caplog.at_level(logging.INFO):
+        assert s.run_if_due() is None
+    assert any(r.levelno == logging.ERROR and "Falha no backup" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------- tela "Mais"

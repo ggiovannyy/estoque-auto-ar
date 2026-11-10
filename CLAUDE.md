@@ -29,6 +29,8 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `tls.py`: certificado https autoassinado nas regras da Apple (senão o iPhone recusa sem opção de continuar).
   - `server.py`: servidor web (Werkzeug) com o handshake https na thread de cada conexão e tempo limite.
   - `paths.py`: onde ficam os dados (`MAXX_DATA`). `single_instance.py`: um sistema aberto por pasta de dados.
+  - `inputs.py`: leitura e validação do que chega nas requisições (`json_body`, `text`, `secret`, `to_int`, limites).
+  - `logs.py`: log em `data/logs/sistema.log` (e no console), ligado pelo `run.py` antes de importar o app.
   - `run.py`: garante o certificado, inicia o backup e o servidor.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
@@ -43,9 +45,9 @@ arquitetura, decisões, histórico e a lista de pendências.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
-pytest -q                                   # 132 testes da API (pasta tests/)
+pytest -q                                   # 164 testes da API (pasta tests/)
 pytest -q e2e                               # 11 testes de interface no navegador (pasta e2e/)
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py logs.py inputs.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```
@@ -71,6 +73,8 @@ python run.py --http --port 8000            # sem https (câmera do celular não
 - Ler, conferir e gravar (categorias, usuários, primeiro acesso, movimentação) roda em `BEGIN IMMEDIATE`. Corrida
   nova ganha teste com o fixture `interleave` (`tests/test_corridas.py`).
 - O `run.py` trava a pasta de dados (`single_instance`) **antes** de importar o `app`, que migra o banco.
+- Todo dado recebido passa por `inputs.py` (`json_body`, `text`, `secret`, `to_int`): tipo errado ou grande demais
+  é 400 com mensagem, nunca 500. Erros da API sempre em JSON `{error}`; o 500 é genérico e o detalhe vai para o log.
 - A tela de login não exige 8 caracteres: senhas antigas mais curtas continuam valendo. O mínimo vale só para senha
   nova.
 - Todo texto do usuário no `app.js` passa por `esc()`. O CSV passa por `csv_safe()`.

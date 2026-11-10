@@ -88,3 +88,25 @@ def test_setup_recusa_senha_curta(app):
 def test_redefinir_senha_curta_e_recusada(owner):
     uid = owner.get("/api/users").get_json()[0]["id"]
     assert owner.put(f"/api/users/{uid}", json={"password": "1234567"}).status_code == 400
+
+
+def test_usuario_inexistente_tambem_calcula_o_hash_da_senha(app, owner, monkeypatch):
+    """Sem isso, a resposta para um usuário que não existe sai bem mais rápido e revela quais usuários existem."""
+    calls = []
+    real = appmod.check_password_hash
+    monkeypatch.setattr(appmod, "check_password_hash", lambda h, p: calls.append(h) or real(h, p))
+    assert login(app.test_client(), "ninguem", "senha-qualquer").status_code == 401
+    assert len(calls) == 1
+
+
+def change_password(client, current):
+    return client.post("/api/password", json={"current": current, "new": "senha-nova-do-dono"})
+
+
+def test_senha_atual_errada_bloqueia_a_troca_depois_de_5_tentativas(owner, clock):
+    """Com um cookie roubado, não dá para descobrir a senha atual tentando sem limite."""
+    for _ in range(5):
+        assert change_password(owner, "chute-errado").status_code == 400
+    assert change_password(owner, DONO["password"]).status_code == 429
+    clock[0] += LoginThrottle.LOCK_SECONDS + 1
+    assert change_password(owner, DONO["password"]).status_code == 200
