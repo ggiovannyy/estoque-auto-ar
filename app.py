@@ -15,6 +15,7 @@ from flask import Flask, Response, g, jsonify, request, send_from_directory, ses
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backup import DEFAULT_KEEP, default_backup_dir, last_backup_at, make_backup, prune_backups
+from migrations import migrate
 from security import SECURITY_HEADERS, LoginThrottle, csv_safe, password_error
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -30,45 +31,6 @@ LOCAL_ADDRESSES = {"127.0.0.1", "::1"}
 
 user_throttle = LoginThrottle(max_failures=5)   # por IP + usuario
 ip_throttle = LoginThrottle(max_failures=20)    # por IP, em qualquer usuario
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY, name TEXT NOT NULL, username TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'atendente',
-  active INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS categories (
-  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE
-);
-CREATE TABLE IF NOT EXISTS products (
-  id INTEGER PRIMARY KEY,
-  barcode TEXT UNIQUE,
-  code TEXT,                       -- codigo/referencia do fabricante
-  name TEXT NOT NULL,
-  category_id INTEGER REFERENCES categories(id),
-  ncm TEXT, brand TEXT,
-  qty INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
-  min_qty INTEGER,                 -- NULL = usa o minimo padrao
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS movements (
-  id INTEGER PRIMARY KEY,
-  product_id INTEGER NOT NULL REFERENCES products(id),
-  type TEXT NOT NULL CHECK (type IN ('in','out','adjust')),
-  qty INTEGER NOT NULL,            -- sempre positivo; 'adjust' guarda a diferenca em delta
-  delta INTEGER NOT NULL,
-  balance INTEGER NOT NULL,
-  note TEXT, user_id INTEGER REFERENCES users(id), created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_mov_product ON movements(product_id, id DESC);
-"""
-
-SEED_CATEGORIES = [
-    "Filtro de cabine", "Válvula", "Compressor", "Condensador", "Evaporador",
-    "Mangueira", "Gás refrigerante", "Óleo", "Sensor", "Correia", "Outros",
-]
 
 
 def get_secret():
@@ -106,13 +68,11 @@ def close_db(_):
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")  # leituras nao bloqueiam durante uma gravacao
-    conn.executescript(SCHEMA)
-    if conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
-        conn.executemany("INSERT INTO categories(name) VALUES (?)", [(c,) for c in SEED_CATEGORIES])
-    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('min_default', ?)", (str(DEFAULT_MIN),))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")  # leituras nao bloqueiam durante uma gravacao
+        migrate(conn)
+    finally:
+        conn.close()
 
 
 def now():
