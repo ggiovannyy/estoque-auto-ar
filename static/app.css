@@ -172,10 +172,13 @@ button.stat.warn b { color: #8a5a00; }
 .seg button[aria-pressed="true"].out { color: var(--red); }
 .stepper { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; margin-bottom: 12px; }
 .stepper button { border: 1.5px solid var(--line); background: var(--paper); border-radius: 12px; font-size: 1.6rem; font-weight: 600; min-height: 56px; }
+input[type=number] { appearance: textfield; -moz-appearance: textfield; } /* sem as setas do navegador: o contador tem − e + */
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .stepper input { text-align: center; font: 700 1.8rem var(--font-h); min-height: 56px; }
 .hist { margin-top: 14px; }
 .hist h4 { font: 600 1rem var(--font-h); margin: 0 0 6px; color: var(--muted); }
 .mv { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.card > .mv:first-child { border-top: 0; } /* o cartão já tem borda: sem linha dupla no topo */
 .mv .d { font: 700 1rem var(--font-h); white-space: nowrap; }
 .mv .d.pos { color: var(--green); } .mv .d.neg { color: var(--red); } .mv .d.adj { color: var(--ink-2); }
 .mv small { color: var(--muted); display: block; font-size: var(--fs-xs); }

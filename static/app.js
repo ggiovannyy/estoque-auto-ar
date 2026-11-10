@@ -388,7 +388,7 @@ function productFields(p = {}) {
     <label class="f"><span>Categoria (tipo de peça)</span><select name="category_id">${catOptions(p.category_id)}</select></label>
     <div class="row2"><label class="f"><span>Código da peça</span><input name="code" value="${esc(p.code)}"></label>
     <label class="f"><span>Marca</span><input name="brand" value="${esc(p.brand)}"></label></div>
-    <div class="row2"><label class="f"><span>Código de barras</span><input name="barcode" value="${esc(p.barcode)}" inputmode="numeric"></label>
+    <div class="row2"><label class="f"><span>Código de barras</span><input name="barcode" value="${esc(p.barcode)}" autocapitalize="characters" autocomplete="off"></label>
     <label class="f"><span>NCM</span><input name="ncm" value="${esc(p.ncm)}" inputmode="numeric"></label></div>
     <label class="f"><span>Mínimo para avisar (vazio = padrão ${S.minDefault})</span><input name="min_qty" type="number" min="0" value="${p.min_qty ?? ""}"></label>`;
 }
@@ -544,7 +544,9 @@ document.addEventListener("click", async (e) => {
     case "backup": t.disabled = true;
       try { showBackup(await api("/backup", { method: "POST" })); toast("Backup salvo."); } catch (er) { toast(er.message, true); }
       t.disabled = false; return;
-    case "logout": await api("/logout", { method: "POST" }); S.user = null; await boot(); return;
+    case "logout":
+      try { await api("/logout", { method: "POST" }); S.user = null; await boot(); } catch (er) { toast(er.message, true); }
+      return;
   }
 });
 document.addEventListener("input", (e) => {

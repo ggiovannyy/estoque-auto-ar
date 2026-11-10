@@ -49,6 +49,23 @@ def test_controles_e_textos_tem_tamanho_confortavel_no_celular(phone):
     check(page, "edição")
 
 
+def test_campo_de_quantidade_nao_mostra_as_setas_do_navegador(page, api):
+    p = api.product()
+    page.goto("/")
+    with page.expect_response(lambda r: "/api/products?" in r.url):
+        page.fill("#q", p["name"])
+    page.locator(f'[data-open="{p["id"]}"]').click()
+    assert page.locator("#mqty").evaluate("(i) => getComputedStyle(i).appearance") == "textfield"
+
+
+def test_codigo_de_barras_aceita_letras_no_teclado_do_celular(page):
+    page.goto("/")
+    page.locator('[data-act="new"]').click()
+    barcode = page.locator('#newform input[name="barcode"]')
+    assert barcode.get_attribute("inputmode") in (None, "text")
+    expect(barcode).to_have_attribute("autocapitalize", "characters")
+
+
 @pytest.mark.parametrize("tab,title", [("stock", "Estoque"), ("alerts", "Alertas de estoque"), ("scan", "Escanear peça"),
                                        ("history", "Histórico"), ("more", "Mais")])
 def test_cada_aba_tem_titulo_e_a_pagina_um_h1(page, tab, title):
@@ -63,3 +80,21 @@ def test_campo_de_nova_categoria_tem_rotulo(page):
     page.goto("/")
     page.locator('nav.tabs [data-tab="more"]').click()
     expect(page.get_by_label("Nova categoria")).to_be_visible()
+
+
+def test_historico_nao_tem_linha_dupla_no_topo(page, api):
+    api.product()
+    page.goto("/")
+    page.locator('nav.tabs [data-tab="history"]').click()
+    first = page.locator(".card .mv").first
+    expect(first).to_be_visible()
+    assert first.evaluate("(m) => getComputedStyle(m).borderTopWidth") == "0px"
+
+
+def test_sair_sem_conexao_avisa_em_vez_de_travar(page):
+    page.goto("/")
+    page.locator('nav.tabs [data-tab="more"]').click()
+    page.context.set_offline(True)
+    page.get_by_role("button", name="Sair").click()
+    expect(page.locator("#toast")).to_contain_text("Sem conexão")
+    page.context.set_offline(False)
