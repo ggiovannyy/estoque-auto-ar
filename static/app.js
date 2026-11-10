@@ -45,12 +45,30 @@ function beep() {
 const lowCount = () => (S.summary ? S.summary.low : 0);
 
 /* ---------------------------------------------------------------- data */
-async function loadAll() {
-  const qs = new URLSearchParams();
+const PAGE_SIZE = 200;
+let productsRequest = 0;
+/* Carrega a lista da aba Estoque (busca e categoria atuais), de página em página. Retorna false
+   quando uma busca mais nova começou antes desta terminar: a resposta antiga é descartada. */
+async function loadProducts(more = false) {
+  const req = ++productsRequest;
+  const qs = new URLSearchParams({ limit: PAGE_SIZE + 1, offset: more ? S.products.length : 0 });
   if (S.q) qs.set("q", S.q);
   if (S.cat) qs.set("category", S.cat);
-  const [products, summary, cats] = await Promise.all([api("/products?" + qs), api("/summary"), api("/categories")]);
-  S.products = products; S.summary = summary; S.cats = cats; S.loaded = true;
+  const page = await api("/products?" + qs);
+  if (req !== productsRequest) return false;
+  S.hasMore = page.length > PAGE_SIZE;
+  S.products = (more ? S.products : []).concat(page.slice(0, PAGE_SIZE));
+  return true;
+}
+async function loadAll() {
+  const [, summary, cats] = await Promise.all([loadProducts(), api("/summary"), api("/categories")]);
+  S.summary = summary; S.cats = cats; S.loaded = true;
+}
+/* Busca e filtro de categoria só mudam a lista: resumo e categorias continuam valendo. */
+async function reloadProducts() {
+  try { if (!(await loadProducts())) return false; } catch (e) { toast(e.message, true); }
+  render();
+  return true;
 }
 /* Dados proprios de cada aba (independentes da busca/filtro da aba Estoque). */
 async function loadTabData() {
@@ -127,6 +145,7 @@ function stockView() {
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
     <div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
     <div class="chips">${chips}</div>${list}
+    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}
     <button class="btn fab" data-act="new">+ Nova peça</button>`);
 }
 
@@ -342,12 +361,15 @@ document.addEventListener("click", async (e) => {
   if (t.hasAttribute("data-close")) { if (t.classList.contains("overlay") && e.target !== t) return; closeSheet(); return; }
   if (t.dataset.tab) { await stopCamera(); S.tab = t.dataset.tab; await loadTabData().catch((er) => toast(er.message, true)); render(); window.scrollTo(0, 0); return; }
   if (t.dataset.open) return openProduct(t.dataset.open);
-  if (t.dataset.cat !== undefined) { S.cat = Number(t.dataset.cat); await refresh(); return; }
+  if (t.dataset.cat !== undefined) { S.cat = Number(t.dataset.cat); await reloadProducts(); return; }
   if (t.dataset.delcat) { if (!confirm("Excluir esta categoria?")) return; try { await api("/categories/" + t.dataset.delcat, { method: "DELETE" }); await refresh(); } catch (er) { toast(er.message, true); } return; }
   if (t.dataset.resetpw) return openUserForm(t.dataset.resetpw);
   if (t.dataset.toggleuser) { try { await api("/users/" + t.dataset.toggleuser, { method: "PUT", body: { active: t.dataset.active === "1" } }); renderUsers(); } catch (er) { toast(er.message, true); } return; }
   switch (t.dataset.act) {
     case "new": return openForm();
+    case "more": t.disabled = true;
+      try { if (await loadProducts(true)) render(); } catch (er) { toast(er.message, true); t.disabled = false; }
+      return;
     case "pw": return openPw();
     case "newuser": return openUserForm();
     case "backup": t.disabled = true;
@@ -359,7 +381,11 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("input", (e) => {
   if (e.target.id !== "q") return;
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(async () => { S.q = e.target.value.trim(); const pos = e.target.selectionStart; await loadAll().catch(() => {}); render(); const q = $("#q"); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }, 250);
+  searchTimer = setTimeout(async () => {
+    S.q = e.target.value.trim(); const pos = e.target.selectionStart;
+    if (!(await reloadProducts())) return;
+    const q = $("#q"); if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+  }, 250);
 });
 
 /* ---------------------------------------------------------------- boot */
