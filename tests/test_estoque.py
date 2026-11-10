@@ -95,6 +95,19 @@ def test_quantidade_inicial_vazia_cadastra_com_zero(owner):
     assert new_product(owner, name="Qty texto", qty="3")["qty"] == 3
 
 
+def test_lista_de_pecas_pode_vir_em_paginas(owner):
+    for i in range(5):
+        new_product(owner, name=f"Peça {i}")
+    def names(qs):
+        return [p["name"] for p in owner.get("/api/products" + qs).get_json()]
+
+    assert names("") == [f"Peça {i}" for i in range(5)]
+    assert names("?limit=2") == ["Peça 0", "Peça 1"]
+    assert names("?limit=2&offset=2") == ["Peça 2", "Peça 3"]
+    assert names("?limit=2&offset=4") == ["Peça 4"]
+    assert names("?limit=abc") == names("?limit=0") == names("")  # limite inválido: lista inteira
+
+
 def test_codigo_de_barras_duplicado_e_recusado(owner):
     new_product(owner, barcode="7891234567895")
     r = owner.post("/api/products", json={"name": "Outra", "barcode": "7891234567895"})
