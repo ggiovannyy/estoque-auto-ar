@@ -180,10 +180,10 @@ function stockView() {
       <div class="stat"><b>${s.items}</b><span>peças cadastradas</span></div>
       <div class="stat"><b>${s.units}</b><span>unidades</span></div>
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
-    <div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
+    <div class="searchrow"><div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
+      <button class="btn new" data-act="new" aria-label="Nova peça"><span aria-hidden="true">+</span><span class="lbl">Nova peça</span></button></div>
     <div class="chips">${chips}</div>${list}
-    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}
-    <div class="fab-gap"></div><button class="btn fab" data-act="new">+ Nova peça</button>`);
+    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`);
 }
 
 function alertsView() {
