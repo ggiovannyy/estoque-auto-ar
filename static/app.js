@@ -25,13 +25,26 @@ let toastTimer;
 function toast(msg, bad = false) {
   const t = $("#toast");
   t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = ""), bad ? 6000 : 2600); // erro: tempo para ler
 }
+/* Carregando: só aparece se a resposta demorar mais de 300 ms, para não piscar na rede local. */
+let pending = 0, loadingTimer;
+function busy(delta) {
+  pending += delta;
+  clearTimeout(loadingTimer);
+  if (pending > 0) loadingTimer = setTimeout(() => ($("#loading").hidden = false), 300);
+  else $("#loading").hidden = true;
+}
+/* Aviso fixo de conexão: some sozinho quando qualquer pedido volta a funcionar. */
+const setOffline = (off) => { $("#net").hidden = !off; };
 async function api(path, opts = {}) {
   const o = { method: opts.method || "GET", headers: {}, credentials: "same-origin" };
   if (opts.body !== undefined) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(opts.body); }
   let r;
-  try { r = await fetch("/api" + path, o); } catch { throw new Error("Sem conexão com o servidor."); }
+  busy(1);
+  try { r = await fetch("/api" + path, o); } catch { setOffline(true); throw new Error("Sem conexão com o servidor."); }
+  finally { busy(-1); }
+  setOffline(false);
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && S.user) { S.user = null; render(); }
   if (!r.ok) throw Object.assign(new Error(data.error || "Erro inesperado."), { status: r.status, data });
@@ -162,10 +175,13 @@ function itemRow(p) {
   const cls = p.qty === 0 ? "zero" : p.low ? "low" : "";
   const meta = [p.code, p.brand].filter(Boolean).join(" · ");
   return `<button class="item ${cls}" data-open="${p.id}">
-    <div class="t"><b>${esc(p.name)}</b><small>${esc(meta || p.barcode || "sem código")}</small>
+    <div class="t"><b>${esc(p.name)}</b><small class="meta">${esc(meta || p.barcode || "sem código")}</small>
       ${stockTag(p)}</div>
+    <span class="c-code">${esc(p.code || p.barcode || "—")}</span><span class="c-brand">${esc(p.brand || "—")}</span>
     <div class="qty"><b>${p.qty}</b><small>mín. ${p.min_effective}</small></div></button>`;
 }
+/* Cabeçalho das colunas da lista: só aparece em tela larga (computador), onde código e marca viram colunas. */
+const LIST_HEADER = '<div class="cols" aria-hidden="true"><span>Peça</span><span>Código</span><span>Marca</span><span>Estoque</span></div>';
 
 function stockView() {
   const s = S.summary || { items: 0, units: 0, low: 0 };
@@ -180,20 +196,21 @@ function stockView() {
       <div class="stat"><b>${s.items}</b><span>peças cadastradas</span></div>
       <div class="stat"><b>${s.units}</b><span>unidades</span></div>
       <button class="stat ${s.low ? "warn" : ""}" data-tab="alerts"><b>${s.low}</b><span>${s.low ? "em alerta" : "sem alertas"}</span></button></div>
-    <div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
-    <div class="chips">${chips}</div>${list}
-    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}
-    <div class="fab-gap"></div><button class="btn fab" data-act="new">+ Nova peça</button>`);
+    <div class="searchrow"><div class="search">${svg("search")}<input id="q" type="search" placeholder="Buscar por nome, código ou marca" value="${esc(S.q)}" aria-label="Buscar peça"></div>
+      <button class="btn new" data-act="new" aria-label="Nova peça"><span aria-hidden="true">+</span><span class="lbl">Nova peça</span></button></div>
+    <div class="chips">${chips}</div>${Object.keys(groups).length ? LIST_HEADER : ""}${list}
+    ${S.hasMore ? '<button class="btn block ghost more" data-act="more">Mostrar mais peças</button>' : ""}`);
 }
 
 function alertsView() {
   const low = S.low; // lista completa vinda do servidor, ja ordenada por quantidade
   shell(`<h2 class="page">Alertas de estoque</h2>
     <p class="muted" style="margin-top:-6px">Peças com quantidade igual ou abaixo do mínimo (padrão: <b>${S.minDefault}</b>).</p>
-    ${low.length ? `<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
+    ${low.length ? `${LIST_HEADER}<div class="list">${low.map(itemRow).join("")}</div>` : `<div class="empty">Tudo certo! Nenhuma peça com estoque baixo.</div>`}`);
 }
 
 const MOVE_LABEL = { in: "Entrada", out: "Saída", adjust: "Contagem" };
+const MOVE_ACTION = { in: "Registrar entrada", out: "Registrar saída", adjust: "Salvar contagem" };
 /* Linha de movimentação: no Histórico geral leva o nome da peça; na folha da peça, não. */
 function moveRow(m, withProduct) {
   const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
@@ -273,11 +290,12 @@ async function stopCamera() {
   scanner = null;
 }
 function scanView() {
-  shell(`<h2 class="page">Escanear peça</h2>
+  shell(`<h2 class="page">Escanear peça</h2>${scanModeHtml()}
     <div id="reader" hidden></div>
     <form id="scanform" class="scanbox"><input id="code" inputmode="text" autocomplete="off" placeholder="Leia o código de barras ou digite" aria-label="Código de barras"><button class="btn">Buscar</button></form>
     <button class="btn block ghost" id="cam">Usar a câmera do celular</button>
-    <p class="muted" style="margin-top:14px">Com o leitor de código de barras, basta clicar no campo e ler a peça. Se ela já existir, abre para dar entrada ou saída; se não, abre o cadastro.</p>`);
+    <div id="batch"></div>`);
+  renderSeq();
   const input = $("#code");
   if (hasMouse()) input.focus();
   $("#scanform").onsubmit = (e) => {
@@ -301,13 +319,14 @@ async function startCamera() {
   });
   try {
     await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: (w) => ({ width: Math.min(300, w - 20), height: 150 }) },
-      async (text) => { beep(); await stopCamera(); handleCode(text); }, () => {});
+      async (text) => { if (seqCameraRead(text)) return; beep(); await stopCamera(); handleCode(text); }, () => {});
   } catch (e) {
     scanner = null; box.hidden = true; btn.textContent = "Usar a câmera do celular";
     toast("Não consegui abrir a câmera. Verifique a permissão no navegador.", true);
   }
 }
 async function handleCode(code) {
+  if (SEQ.on) return seqAdd(code); // leitura em sequência: entra na lista, sem abrir nada
   try { const p = await api("/products/barcode/" + encodeURIComponent(code)); openProduct(p.id); }
   catch (e) {
     if (e.status === 404) { toast("Peça nova — preencha o cadastro."); openForm({ barcode: code }); }
@@ -372,7 +391,7 @@ function productFields(p = {}) {
     <label class="f"><span>Mínimo para avisar (vazio = padrão ${S.minDefault})</span><input name="min_qty" type="number" min="0" value="${p.min_qty ?? ""}"></label>`;
 }
 
-function openForm(prefill = {}) {
+function openForm(prefill = {}, onCreated) {
   openSheet(`<header><h3>Nova peça</h3><button class="x" data-close aria-label="Fechar">×</button></header>
     <form id="newform"><div id="ferr"></div>${productFields(prefill)}
     <label class="f"><span>Quantidade em estoque agora</span><input name="qty" type="number" min="0" value="1"></label>
@@ -381,6 +400,7 @@ function openForm(prefill = {}) {
     try {
       const p = await api("/products", { method: "POST", body: formBody(f) });
       closeSheet(); toast(`${p.name} cadastrada (${p.qty} un.).`);
+      if (onCreated) onCreated(p);
       S.tab = S.tab === "scan" ? "scan" : "stock"; await refresh();
     } catch (er) { showError("#ferr", er); }
   });
@@ -400,7 +420,7 @@ async function openProduct(id) {
     <span class="flabel" id="qlabel">Quantidade</span>
     <div class="stepper"><button data-step="-1" aria-label="Menos">−</button><input id="mqty" type="number" inputmode="numeric" min="1" value="1" aria-labelledby="qlabel"><button data-step="1" aria-label="Mais">+</button></div>
     <label class="f"><span>Observação (opcional)</span><input id="mnote" placeholder="Ex.: venda sem nota, OS 123"></label>
-    <button class="btn block" id="mgo">Registrar saída</button>
+    <button class="btn block out" id="mgo">Registrar saída</button>
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
       <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
@@ -408,16 +428,23 @@ async function openProduct(id) {
   // Um id por intenção: reenviar a mesma depois de "Sem conexão" não grava de novo; mudar o pedido gera outro id.
   let requestId = newRequestId();
   const changed = () => (requestId = newRequestId());
+  // O botão diz o tipo pela cor e mostra o saldo que vai ficar: Saída é o padrão, e assim a Entrada não sai trocada.
+  const updateGo = () => {
+    const n = Number(qty.value), after = type === "in" ? p.qty + n : type === "out" ? p.qty - n : n;
+    const preview = qty.value === "" || !Number.isInteger(n) ? "" : after < 0 ? ` · há só ${p.qty}` : ` · ${p.qty} → ${after}`;
+    go.textContent = MOVE_ACTION[type] + preview; go.className = `btn block ${type}`;
+  };
   const setType = (t) => { type = t; changed();
     sheetRoot.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.type === t));
-    go.textContent = t === "in" ? "Registrar entrada" : t === "out" ? "Registrar saída" : "Salvar contagem";
     qty.min = t === "adjust" ? 0 : 1; qty.value = t === "adjust" ? p.qty : 1;
-    $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; };
+    $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; updateGo(); };
   sheetRoot.querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
   sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => {
-    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); changed();
+    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); changed(); updateGo();
   }));
-  qty.oninput = note.oninput = changed;
+  qty.oninput = () => { changed(); updateGo(); };
+  note.oninput = changed;
+  updateGo();
   go.onclick = async () => {
     go.disabled = true;
     const body = { type, qty: qty.value, note: note.value, request_id: requestId };
@@ -426,7 +453,7 @@ async function openProduct(id) {
       const r = await api(`/products/${id}/move`, { method: "POST", body });
       closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh();
     } catch (e) {
-      if (e.status === 409 && Number.isInteger(e.data.qty)) { p.qty = e.data.qty; $(".bigqty b").textContent = p.qty; changed(); }
+      if (e.status === 409 && Number.isInteger(e.data.qty)) { p.qty = e.data.qty; $(".bigqty b").textContent = p.qty; changed(); updateGo(); }
       showError("#merr", e); go.disabled = false;
     }
   };
@@ -509,6 +536,7 @@ document.addEventListener("click", async (e) => {
     case "more": t.disabled = true;
       try { if (await loadProducts(true)) render(); } catch (er) { toast(er.message, true); t.disabled = false; }
       return;
+    case "retry": t.disabled = true; await refresh(); t.disabled = false; return;
     case "pw": return openPw();
     case "newuser": return openUserForm();
     case "backup": t.disabled = true;
