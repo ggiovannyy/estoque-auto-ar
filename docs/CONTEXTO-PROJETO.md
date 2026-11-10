@@ -120,6 +120,8 @@ exato do sistema de notas.
 | `tests/` | ~785 | 87 testes pytest da API |
 | `e2e/` | ~230 | 10 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
+| `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
+| `.github/scripts/confere_crlf.py` | — | Falha se algum `.bat` tiver linha só com LF |
 | `.claude/` | — | 16 skills, 6 comandos (`/addy-*`) e 3 agentes do Claude Code, adicionados pelo desenvolvedor |
 | `.gitattributes` | — | `*.bat -text` (gravados com **CRLF**), `*.sh eol=lf` |
 | `.gitignore` | — | `.venv/`, `data/`, `__pycache__/`, `*.pem` (e libera `.claude/`) |
@@ -289,8 +291,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 5. Passagem para o computador do desenvolvedor (a partir de 08/11/2026, Claude Code local): documentos de contexto
    (PR #3), `iniciar.bat` usando o `py` (PR #4), migrações do banco (PR #5) e códigos UPC-A gravados como EAN-13
    (PR #6, item 15 da revisão), itens 11, 12 e 13 da revisão (PR #7) remoção de `movements.qty` (PR #8, item 10) busca com paginação
-   (PR #9, item 14) limpeza do `app.js` (PR #10) e testes de
-   interface (PR #11).
+   (PR #9, item 14), limpeza do `app.js` (PR #10), testes de
+   interface (PR #11) e CI no GitHub Actions (PR #12).
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -302,7 +304,8 @@ a97e956 Sistema de estoque Maxx Auto Ar
 [#8](https://github.com/ggiovannyy/estoque-auto-ar/pull/8), item 10;
 [#9](https://github.com/ggiovannyy/estoque-auto-ar/pull/9), item 14;
 [#10](https://github.com/ggiovannyy/estoque-auto-ar/pull/10), limpeza do `app.js`;
-[#11](https://github.com/ggiovannyy/estoque-auto-ar/pull/11), testes de interface.
+[#11](https://github.com/ggiovannyy/estoque-auto-ar/pull/11), testes de interface;
+[#12](https://github.com/ggiovannyy/estoque-auto-ar/pull/12), CI.
 
 ---
 
@@ -333,11 +336,9 @@ a97e956 Sistema de estoque Maxx Auto Ar
 ### 8.2 Itens restantes da revisão de código (Optional / Nit)
 
 Os itens 1 a 15 já estão resolvidos (1-5 no PR #1; 6, 7 e 8 no PR #2; 9, migrações do banco, no PR #5;
-15, UPC-A × EAN-13, no PR #6; 11, 12 e 13 no PR #7; 10 no PR #8; 14 no PR #9; os Nits do `app.js` no PR #10). Faltam:
+15, UPC-A × EAN-13, no PR #6; 11, 12 e 13 no PR #7; 10 no PR #8; 14 no PR #9; os Nits do `app.js` no PR #10). Os testes de interface entraram no PR #11 e o CI no PR #12.
 
-| # | Item | Sugestão |
-|---|---|---|
-| — | Sem CI | GitHub Actions rodando `pytest` |
+**Nenhum item da revisão está pendente.**
 
 ### 8.3 Operação e entrega
 
