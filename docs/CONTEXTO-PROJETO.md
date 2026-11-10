@@ -119,6 +119,8 @@ exato do sistema de notas.
 | `security.py` | ~88 | Regras sem dependência do Flask: senha mínima, `LoginThrottle`, `csv_safe`, cabeçalhos de segurança/CSP |
 | `backup.py` | ~120 | Backup diário: `make_backup` (API de backup do SQLite), `prune_backups`, `default_backup_dir`, `BackupScheduler` |
 | `tls.py` | ~80 | Certificado https autoassinado nas regras da Apple; refeito quando vence, muda o IP ou está fora das regras |
+| `paths.py` | ~6 | Onde ficam os dados (`MAXX_DATA`, `estoque.db`), sem importar o Flask |
+| `single_instance.py` | ~30 | Trava `data/sistema.lock`: um sistema aberto por pasta de dados |
 | `server.py` | ~30 | Servidor web (Werkzeug): handshake https na thread de cada conexão e tempo limite de 30 s |
 | `run.py` | ~62 | Ponto de entrada: garante o certificado, imprime endereços, liga cookie Secure, inicia backup e servidor |
 | `static/index.html` | — | Casca da página |
@@ -130,7 +132,7 @@ exato do sistema de notas.
 | `instalar-inicio-automatico.bat` / `remover-inicio-automatico.bat` | — | Liga ou desliga a abertura automática com o Windows (pasta Inicializar) |
 | `requirements.txt` | — | Dependências com **versão exata** (inclusive as indiretas) |
 | `requirements-dev.txt` | — | + `pytest==9.2.0`, `pyflakes==4.1.0`, `playwright==1.64.1` (e indiretas) |
-| `tests/` | ~1050 | 108 testes pytest da API |
+| `tests/` | ~1300 | 132 testes pytest da API |
 | `e2e/` | ~260 | 11 testes de interface (Playwright para Python), com o `run.py` rodando de verdade |
 | `pytest.ini` | — | `testpaths = tests`: o `pytest -q` não abre navegador |
 | `.github/workflows/testes.yml` | — | CI: API (Windows/Linux, Python 3.13/3.14), interface e CRLF dos `.bat` |
@@ -146,7 +148,7 @@ users      (id, name, username UNIQUE, password_hash, role 'dono'|'atendente', a
 categories (id, name UNIQUE NOCASE)                 -- tipos de peça; 11 categorias iniciais
 products   (id, barcode UNIQUE, code, name, category_id, ncm, brand,
             qty CHECK(qty>=0), min_qty NULL=usa padrão, active, created_at)
-movements  (id, product_id, type 'in'|'out'|'adjust', delta, balance, note, user_id, created_at)
+movements  (id, product_id, type 'in'|'out'|'adjust', delta, balance, note, user_id, request_id UNIQUE, created_at)
 settings   (key, value)                             -- min_default = '2'
 ```
 
@@ -168,6 +170,8 @@ settings   (key, value)                             -- min_default = '2'
     nomeando as duas e o sistema não abre até alguém resolver.
   - O passo 3 remove `movements.qty`, que repetia `|delta|` em entrada e saída e `balance` em contagem. Exige SQLite
     3.35 ou mais novo (o Python 3.13/3.14 já traz).
+  - O passo 4 cria `movements.request_id` (único; vários NULL valem): o identificador do pedido gerado pela tela, para
+    um reenvio não baixar duas vezes.
   - Um banco de versão mais nova que o sistema é recusado (`SchemaTooNewError`), para uma versão antiga não estragá-lo.
   - **Para mudar o esquema:** acrescentar um passo no fim da lista, com teste de banco antigo subindo de versão.
     Nunca alterar um passo que já foi para a oficina.
@@ -187,7 +191,7 @@ settings   (key, value)                             -- min_default = '2'
 | `GET /api/products/<id>` | logado | Detalhe e últimas 15 movimentações |
 | `POST /api/products`, `PUT /api/products/<id>` | logado | Cadastro (com `qty` inicial) e edição |
 | `DELETE /api/products/<id>` | dono | Exclusão lógica |
-| `POST /api/products/<id>/move` | logado; `adjust` só dono | `{type: in|out|adjust, qty, note}`; `qty` até 100000 |
+| `POST /api/products/<id>/move` | logado; `adjust` só dono | `{type: in|out|adjust, qty, note, request_id?, expected?}`; `qty` até 100000. `request_id` repetido: 200 sem gravar de novo. `expected` (contagem) diferente do saldo: 409 com `qty` atual |
 | `GET /api/summary` | logado | Totais e quantidade em alerta |
 | `GET /api/movements?limit=` | logado | Histórico (máximo 500) |
 | `GET /api/export.csv` | logado | Planilha (`;`, BOM UTF-8, protegida contra fórmulas) |
@@ -240,6 +244,11 @@ settings   (key, value)                             -- min_default = '2'
   (0600).
 - **Disponibilidade:** uma conexão parada (celular que perdeu o Wi-Fi, varredura de rede) não trava o servidor https
   e é fechada depois de 30 s (`server.py`, testado em `tests/test_servidor.py`).
+- **Um sistema por pasta de dados:** o `run.py` trava `data/sistema.lock` antes de importar o app (que migra o banco).
+  Uma segunda janela explica e sai. Pasta de dados dentro do OneDrive/Google Drive/Dropbox gera aviso no início.
+- **Corridas:** excluir categoria, desativar usuário (sempre sobra um dono ativo), primeiro acesso, reenvio de
+  movimentação e contagem com saldo visto rodam em `BEGIN IMMEDIATE` (`tests/test_corridas.py`,
+  `tests/test_idempotencia.py`).
 - **Escape de HTML** com `esc()` em todo texto vindo do usuário no `app.js`.
 - **CSRF:** mitigado por SameSite=Lax mais o corpo JSON (`get_json` exige `Content-Type: application/json`).
 
@@ -316,7 +325,9 @@ a97e956 Sistema de estoque Maxx Auto Ar
 6. Testes práticos: certificado https nas regras da Apple, que o iPhone recusava (PR #13).
 7. Auditoria do backend (10/11/2026), com a lista de achados BE-01 a BE-19. Fase 1: servidor https que travava
    com uma conexão parada (BE-01, PR #14); não abrir em http sem certificado, teto de quantidade, contagem só do
-   dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #16).
+   dono e sessões derrubadas na troca de senha (BE-02, BE-04, BE-19 e BE-03, PR #16). Fase 2: reenvio de
+   movimentação, contagem com saldo visto, pasta na nuvem, instância única e corridas (BE-05, 06, 07, 09, 12, 13 e
+   14, PR da fase 2). A tela passa a usar `request_id` e `expected` nos PRs da sessão de frontend.
 
 **PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
 [#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
@@ -396,13 +407,13 @@ para o porte.
 | BE-03 | Média | Trocar a senha não derrubava as sessões abertas | Corrigido (PR #16) |
 | BE-04 | Média | Quantidade sem teto (código de barras no campo de quantidade; 500 acima de 2⁶³) | Corrigido (PR #16) |
 | BE-19 | Média | Atendente podia fazer Contagem (definir saldo) | Corrigido (PR #16) |
-| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Fase 2 |
-| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Fase 2 |
-| BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Fase 2 |
-| BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Fase 2 |
-| BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Fase 2 |
-| BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Fase 2 |
-| BE-14 | Baixa | Corrida no primeiro acesso | Fase 2 |
+| BE-05 | Média | Reenvio de uma movimentação (rede ruim) duplica a baixa | Corrigido na API (fase 2); falta a tela mandar `request_id` |
+| BE-06 | Média | Contagem apaga movimentos feitos enquanto se contava | Corrigido na API (fase 2); falta a tela mandar `expected` |
+| BE-07 | Média | `data/` (banco e `secret.key`) dentro de pasta sincronizada | Aviso no início (fase 2) |
+| BE-09 | Baixa | Duas instâncias do sistema na mesma porta (Windows) | Corrigido (fase 2) |
+| BE-12 | Baixa | Corrida ao excluir categoria tira a categoria de peça nova | Corrigido (fase 2) |
+| BE-13 | Baixa | Dois donos podem desativar um ao outro (sem dono ativo) | Corrigido (fase 2) |
+| BE-14 | Baixa | Corrida no primeiro acesso | Corrigido (fase 2) |
 | BE-10 | Baixa | Corpo JSON com tipo inesperado dá 500 | Fase 3 |
 | BE-11 | Baixa | Categoria inexistente responde "código de barras repetido" | Fase 3 |
 | BE-15 | Baixa | Enumeração de usuário pelo tempo do login; `/api/password` sem limite | Fase 3 |
@@ -431,9 +442,9 @@ para o porte.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium   # uma vez
-pytest -q            # 108 testes da API, ~25 s
+pytest -q            # 132 testes da API, ~32 s
 pytest -q e2e        # 11 testes de interface, ~18 s
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py tests/ e2e/
 ```
 
 - O `tests/conftest.py` aponta `MAXX_DATA` para uma pasta temporária e cria um banco novo por teste.
@@ -479,7 +490,7 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py serv
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 108 passed).
+2. Rodar `pytest -q` (esperado: 132 passed).
 3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
    no mesmo Wi-Fi com câmera e certificado, leitor USB).
 4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.

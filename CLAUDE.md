@@ -28,6 +28,7 @@ arquitetura, decisões, histórico e a lista de pendências.
   - `backup.py`: backup diário para a pasta do OneDrive ou do Google Drive.
   - `tls.py`: certificado https autoassinado nas regras da Apple (senão o iPhone recusa sem opção de continuar).
   - `server.py`: servidor web (Werkzeug) com o handshake https na thread de cada conexão e tempo limite.
+  - `paths.py`: onde ficam os dados (`MAXX_DATA`). `single_instance.py`: um sistema aberto por pasta de dados.
   - `run.py`: garante o certificado, inicia o backup e o servidor.
 - **Interface:** `static/app.js` e `static/app.css`. A câmera usa `static/vendor/html5-qrcode.min.js`.
 - **Testes:** `tests/` (API, pytest) e `e2e/` (interface, Playwright, sobe o `run.py` com dados temporários).
@@ -42,9 +43,9 @@ arquitetura, decisões, histórico e a lista de pendências.
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium       # uma vez, para os testes de interface
-pytest -q                                   # 108 testes da API (pasta tests/)
+pytest -q                                   # 132 testes da API (pasta tests/)
 pytest -q e2e                               # 11 testes de interface no navegador (pasta e2e/)
-python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py tests/ e2e/
+python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py server.py paths.py single_instance.py tests/ e2e/
 python run.py                               # https://localhost:8443 (padrão)
 python run.py --http --port 8000            # sem https (câmera do celular não funciona)
 ```
@@ -67,6 +68,9 @@ python run.py --http --port 8000            # sem https (câmera do celular não
 - A sessão guarda o `uid` e a marca da senha (`password_mark`). Trocar a senha derruba as outras sessões. Login novo
   passa por `start_session`.
 - Contagem (`adjust`) só o dono. Quantidades e mínimos vão até `MAX_QTY` (100000).
+- Ler, conferir e gravar (categorias, usuários, primeiro acesso, movimentação) roda em `BEGIN IMMEDIATE`. Corrida
+  nova ganha teste com o fixture `interleave` (`tests/test_corridas.py`).
+- O `run.py` trava a pasta de dados (`single_instance`) **antes** de importar o `app`, que migra o banco.
 - A tela de login não exige 8 caracteres: senhas antigas mais curtas continuam valendo. O mínimo vale só para senha
   nova.
 - Todo texto do usuário no `app.js` passa por `esc()`. O CSV passa por `csv_safe()`.
