@@ -194,6 +194,7 @@ function alertsView() {
 }
 
 const MOVE_LABEL = { in: "Entrada", out: "Saída", adjust: "Contagem" };
+const MOVE_ACTION = { in: "Registrar entrada", out: "Registrar saída", adjust: "Salvar contagem" };
 /* Linha de movimentação: no Histórico geral leva o nome da peça; na folha da peça, não. */
 function moveRow(m, withProduct) {
   const cls = m.type === "adjust" ? "adj" : m.delta > 0 ? "pos" : "neg";
@@ -400,7 +401,7 @@ async function openProduct(id) {
     <span class="flabel" id="qlabel">Quantidade</span>
     <div class="stepper"><button data-step="-1" aria-label="Menos">−</button><input id="mqty" type="number" inputmode="numeric" min="1" value="1" aria-labelledby="qlabel"><button data-step="1" aria-label="Mais">+</button></div>
     <label class="f"><span>Observação (opcional)</span><input id="mnote" placeholder="Ex.: venda sem nota, OS 123"></label>
-    <button class="btn block" id="mgo">Registrar saída</button>
+    <button class="btn block out" id="mgo">Registrar saída</button>
     <div class="hist"><h4>Últimas movimentações</h4>${hist || '<span class="muted">Nenhuma ainda.</span>'}</div>
     <details class="edit"><summary>Editar dados da peça</summary><form id="editform">${productFields(p)}
       <div id="eerr"></div><button class="btn block">Salvar alterações</button>${owner ? `<button type="button" class="btn danger block" id="del" style="margin-top:8px">Excluir peça</button>` : ""}</form></details>`);
@@ -408,16 +409,23 @@ async function openProduct(id) {
   // Um id por intenção: reenviar a mesma depois de "Sem conexão" não grava de novo; mudar o pedido gera outro id.
   let requestId = newRequestId();
   const changed = () => (requestId = newRequestId());
+  // O botão diz o tipo pela cor e mostra o saldo que vai ficar: Saída é o padrão, e assim a Entrada não sai trocada.
+  const updateGo = () => {
+    const n = Number(qty.value), after = type === "in" ? p.qty + n : type === "out" ? p.qty - n : n;
+    const preview = qty.value === "" || !Number.isInteger(n) ? "" : after < 0 ? ` · há só ${p.qty}` : ` · ${p.qty} → ${after}`;
+    go.textContent = MOVE_ACTION[type] + preview; go.className = `btn block ${type}`;
+  };
   const setType = (t) => { type = t; changed();
     sheetRoot.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.type === t));
-    go.textContent = t === "in" ? "Registrar entrada" : t === "out" ? "Registrar saída" : "Salvar contagem";
     qty.min = t === "adjust" ? 0 : 1; qty.value = t === "adjust" ? p.qty : 1;
-    $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; };
+    $("#qlabel").textContent = t === "adjust" ? "Quantidade contada" : "Quantidade"; updateGo(); };
   sheetRoot.querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => setType(b.dataset.type)));
   sheetRoot.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => {
-    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); changed();
+    qty.value = Math.max(Number(qty.min), (Number(qty.value) || 0) + Number(b.dataset.step)); changed(); updateGo();
   }));
-  qty.oninput = note.oninput = changed;
+  qty.oninput = () => { changed(); updateGo(); };
+  note.oninput = changed;
+  updateGo();
   go.onclick = async () => {
     go.disabled = true;
     const body = { type, qty: qty.value, note: note.value, request_id: requestId };
@@ -426,7 +434,7 @@ async function openProduct(id) {
       const r = await api(`/products/${id}/move`, { method: "POST", body });
       closeSheet(); toast(`${r.name}: agora ${r.qty} em estoque.`); await refresh();
     } catch (e) {
-      if (e.status === 409 && Number.isInteger(e.data.qty)) { p.qty = e.data.qty; $(".bigqty b").textContent = p.qty; changed(); }
+      if (e.status === 409 && Number.isInteger(e.data.qty)) { p.qty = e.data.qty; $(".bigqty b").textContent = p.qty; changed(); updateGo(); }
       showError("#merr", e); go.disabled = false;
     }
   };

@@ -14,7 +14,7 @@
   --amber-bg: #fff3d6;
   --red: #c62828;        /* saida, sem estoque, excluir */
   --red-bg: #fde7e7;
-  --green: #1b8f61;
+  --green: #157a52;      /* entrada (5,3:1 com texto branco) */
   --radius: 14px;
   --nav-h: 64px;
   --font-h: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -70,7 +70,9 @@ nav.tabs .dot { position: absolute; top: 8px; left: calc(50% + 6px); min-width: 
 .btn:hover { background: var(--blue-d); }
 .btn.ghost { background: transparent; color: var(--blue-d); border: 1.5px solid var(--line); }
 .btn.dark { background: var(--ink); }
-.btn.danger { background: var(--red); }
+.btn.danger, .btn.out { background: var(--red); }
+.btn.in { background: var(--green); }
+.btn.out:hover, .btn.in:hover, .btn.danger:hover { filter: brightness(.88); }
 .btn.block { width: 100%; }
 .btn.sm { min-height: 38px; padding: 6px 12px; font-size: .9rem; }
 .btn[disabled] { opacity: .5; }

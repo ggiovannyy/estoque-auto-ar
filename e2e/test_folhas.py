@@ -141,3 +141,34 @@ def test_contagem_avisa_quando_o_estoque_mudou_enquanto_contava(page, api):
 
     page.locator("#mgo").click()  # conferiu e salva de novo
     expect(page.locator("#toast")).to_contain_text("agora 7 em estoque")
+
+
+# ---------------------------------------------------------------- tipo de movimentação inconfundível (FE-05)
+def test_botao_mostra_o_tipo_pela_cor_e_o_saldo_que_vai_ficar(page, api):
+    from test_identidade_visual import CONTRAST
+    p = api.product(qty=5)
+    page.goto("/")
+    open_product(page, p)
+    go = page.locator("#mgo")
+    expect(go).to_have_text("Registrar saída · 5 → 4")
+    expect(go).to_have_class("btn block out")
+    page.fill("#mqty", "2")
+    expect(go).to_have_text("Registrar saída · 5 → 3")
+    page.fill("#mqty", "9")
+    expect(go).to_have_text("Registrar saída · há só 5")
+
+    page.locator('[data-type="in"]').click()
+    expect(go).to_have_text("Registrar entrada · 5 → 6")
+    expect(go).to_have_class("btn block in")
+    page.locator('[data-step="1"]').click()
+    expect(go).to_have_text("Registrar entrada · 5 → 7")
+
+    page.locator('[data-type="adjust"]').click()
+    expect(go).to_have_text("Salvar contagem · 5 → 5")
+    expect(go).to_have_class("btn block adjust")
+    for t in ("out", "in", "adjust"):
+        page.locator(f'[data-type="{t}"]').click()
+        assert go.evaluate(CONTRAST) >= 4.5, t
+    colors = {t: (page.locator(f'[data-type="{t}"]').click(), go.evaluate("(b) => getComputedStyle(b).backgroundColor"))[1]
+              for t in ("out", "in", "adjust")}
+    assert len(set(colors.values())) == 3, colors
