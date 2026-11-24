@@ -368,18 +368,10 @@ a97e956 Sistema de estoque Maxx Auto Ar
    toque, texto e semântica (PR #21); busca sem recriar a tela, câmera sob demanda, CSP rígida, fontes locais e
    ícones (PR #22).
 
-**PRs:** [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1),
-[#2](https://github.com/ggiovannyy/estoque-auto-ar/pull/2),
-[#3](https://github.com/ggiovannyy/estoque-auto-ar/pull/3),
-[#4](https://github.com/ggiovannyy/estoque-auto-ar/pull/4),
-[#5](https://github.com/ggiovannyy/estoque-auto-ar/pull/5),
-[#6](https://github.com/ggiovannyy/estoque-auto-ar/pull/6) e
-[#7](https://github.com/ggiovannyy/estoque-auto-ar/pull/7), juntados à `main`;
-[#8](https://github.com/ggiovannyy/estoque-auto-ar/pull/8), item 10;
-[#9](https://github.com/ggiovannyy/estoque-auto-ar/pull/9), item 14;
-[#10](https://github.com/ggiovannyy/estoque-auto-ar/pull/10), limpeza do `app.js`;
-[#11](https://github.com/ggiovannyy/estoque-auto-ar/pull/11), testes de interface;
-[#12](https://github.com/ggiovannyy/estoque-auto-ar/pull/12), CI.
+**PRs:** de [#1](https://github.com/ggiovannyy/estoque-auto-ar/pull/1) a
+[#22](https://github.com/ggiovannyy/estoque-auto-ar/pull/22), todos juntados à `main`
+([lista completa](https://github.com/ggiovannyy/estoque-auto-ar/pulls?q=is%3Apr+is%3Amerged)). O que cada um fez
+está nas etapas acima e nas tabelas das seções 8.6 e 8.7.
 
 ---
 
@@ -566,7 +558,9 @@ python -m pyflakes app.py run.py backup.py security.py migrations.py tls.py serv
 ## 11. Primeiros passos sugeridos na nova conversa
 
 1. Ler este arquivo e o `README.md`.
-2. Rodar `pytest -q` (esperado: 164 passed).
-3. Fazer os testes da seção 8.1 que ainda faltam na máquina do desenvolvedor (dois cliques no `iniciar.bat`, celular
-   no mesmo Wi-Fi com câmera e certificado, leitor USB).
-4. Seguir com os demais itens da 8.2. Qualquer mudança de esquema vai como passo novo em `migrations.py`.
+2. Rodar `pytest -q` (esperado: 181 passed) e `pytest -q e2e` (esperado: 67 passed).
+3. Nenhum item de código das revisões está aberto (seções 8.2, 8.6 e 8.7). O foco agora é levar o sistema para a
+   oficina: os testes práticos da seção 8.1 que faltam (acesso e câmera no iPhone e no Android depois do PR #13,
+   leitor USB real, `.bat` de início automático, firewall, backup na nuvem) e a instalação.
+4. Depois: operação e entrega (8.3), proposta comercial (8.5) e ideias da fase 2 (8.4). Qualquer mudança de esquema
+   vai como passo novo em `migrations.py`.
